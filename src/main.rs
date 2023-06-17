@@ -2,6 +2,7 @@ use clap::Parser;
 use std::path::Path;
 use std::time::Instant;
 mod scanner;
+mod parser;
 
 #[derive(Parser)]
 #[command(author, version)]

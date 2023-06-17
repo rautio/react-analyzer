@@ -1,11 +1,12 @@
 use std::path::Path;
-use std::path::PathBuf;
 use std::fs::metadata;
 use regex::Regex;
+use super::parser;
+use super::parser::ParsedFile;
 
 /// Lists all files in given diretory path. 
-fn list_files(path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<PathBuf> {
-    let mut files : Vec<PathBuf> = Vec::new();
+fn list_files(path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<ParsedFile> {
+    let mut files : Vec<ParsedFile> = Vec::new();
     // Read path and validate
     for entry in path.read_dir().expect("Unable to read directory.") {
         if let Ok(entry) = entry {
@@ -20,7 +21,10 @@ fn list_files(path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<PathB
             } else {
                 // Only add file if it matches pattern
                 if pattern.is_match(name) {
-                    files.push(entry.path())
+                    let parsed = parser::parse_file(&entry.path());
+                    if let Ok(p) = parsed {
+                        files.push(p)
+                    }
                 }
             }
         }
@@ -38,5 +42,10 @@ pub fn scan(path:&Path) {
     let pattern = Regex::new(r"^.*\.jsx|js|tsx|ts$").unwrap();
 
     let files = list_files(path, &pattern, &ignore_pattern);
-    println!("Files: {}", files.len())
+    println!("Files: {}", files.len());
+    let mut total_lines = 0;
+    for file in files {
+        total_lines += file.line_count
+    }
+    println!("Total Lines: {}", total_lines);
 }
