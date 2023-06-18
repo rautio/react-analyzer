@@ -1,7 +1,6 @@
 use std::path::Path;
 use std::fs::metadata;
 use regex::Regex;
-use super::parser;
 use super::parser::ParsedFile;
 
 /// Lists all files in given diretory path. 
@@ -21,7 +20,7 @@ fn list_files(path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Parse
             } else {
                 // Only add file if it matches pattern
                 if pattern.is_match(name) {
-                    let parsed = parser::parse_file(&entry.path());
+                    let parsed = ParsedFile::new(&entry.path());
                     if let Ok(p) = parsed {
                         files.push(p)
                     }
