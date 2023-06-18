@@ -42,8 +42,11 @@ pub fn scan(path: &Path) {
     let files = list_files(path, &pattern, &ignore_pattern);
     println!("Files: {}", files.len());
     let mut total_lines = 0;
+    let mut total_imports: usize = 0;
     for file in files {
-        total_lines += file.line_count
+        total_lines += file.line_count;
+        total_imports += file.imports.len();
     }
     println!("Total Lines: {}", total_lines);
+    println!("Total Imports: {}", total_imports);
 }
