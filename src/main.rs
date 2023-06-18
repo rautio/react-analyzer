@@ -1,8 +1,8 @@
 use clap::Parser;
 use std::path::Path;
 use std::time::Instant;
-mod scanner;
 mod parser;
+mod scanner;
 
 #[derive(Parser)]
 #[command(author, version)]
