@@ -42,7 +42,7 @@ impl ParsedFile {
         for l in reader.lines() {
             if let Ok(cur_line) = l {
                 if lang.is_import(&cur_line) {
-                    imports.push(lang.parse_import(&cur_line))
+                    imports.push(lang.parse_import(&cur_line, &path))
                 }
             }
             line_count += 1;
