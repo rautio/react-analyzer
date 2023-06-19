@@ -37,7 +37,7 @@ pub fn scan(path: &Path) {
 
     // Add as CLI parameters and read from ignore file
     let ignore_pattern: Regex = Regex::new(r"node_modules").unwrap();
-    let pattern = Regex::new(r"^.*\.jsx|js|tsx|ts$").unwrap();
+    let pattern = Regex::new(r"^.*\.(jsx|js|tsx|ts)$").unwrap();
 
     let files = list_files(path, &pattern, &ignore_pattern);
     println!("Files: {}", files.len());

@@ -1,6 +1,7 @@
 use clap::Parser;
 use std::path::Path;
 use std::time::Instant;
+mod languages;
 mod parser;
 mod scanner;
 
@@ -10,6 +11,7 @@ mod scanner;
 struct Cli {
     /// Path to folder root
     path: std::path::PathBuf,
+    // language: String,
 }
 
 fn main() {
