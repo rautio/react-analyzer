@@ -3,6 +3,7 @@ use std::path::Path;
 use std::time::Instant;
 mod extractor;
 mod languages;
+mod output;
 mod parser;
 mod scanner;
 
@@ -24,6 +25,7 @@ fn main() {
         println!("Analyzing: {}", path.display());
         let files: Vec<parser::ParsedFile> = scanner::scan(path);
         let (summary, output) = extractor::extract(files);
+        let _ = output::write_output(output);
         println!("\n{}\n", summary);
     }
     let elapsed = now.elapsed();

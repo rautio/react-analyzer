@@ -11,6 +11,7 @@ use std::path::Path;
 pub struct ParsedFile {
     pub line_count: usize,
     pub imports: Vec<Import>,
+    pub name: String,
     pub extension: String,
     pub path: String,
 }
@@ -49,6 +50,7 @@ impl ParsedFile {
         let parsed = ParsedFile {
             line_count,
             imports,
+            name: path.file_name().unwrap().to_str().unwrap().to_string(),
             extension: extension.unwrap().to_string(),
             path: path.to_str().unwrap().to_string(),
         };
