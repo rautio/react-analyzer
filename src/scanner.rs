@@ -32,21 +32,10 @@ fn list_files(path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Parse
 }
 
 /// Scan a given path
-pub fn scan(path: &Path) {
-    println!("Scanning: {}", path.display());
-
+pub fn scan(path: &Path) -> Vec<ParsedFile> {
     // Add as CLI parameters and read from ignore file
     let ignore_pattern: Regex = Regex::new(r"node_modules").unwrap();
     let pattern = Regex::new(r"^.*\.(jsx|js|tsx|ts)$").unwrap();
 
-    let files = list_files(path, &pattern, &ignore_pattern);
-    println!("Files: {}", files.len());
-    let mut total_lines = 0;
-    let mut total_imports: usize = 0;
-    for file in files {
-        total_lines += file.line_count;
-        total_imports += file.imports.len();
-    }
-    println!("Total Lines: {}", total_lines);
-    println!("Total Imports: {}", total_imports);
+    return list_files(path, &pattern, &ignore_pattern);
 }

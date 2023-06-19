@@ -12,6 +12,7 @@ pub struct ParsedFile {
     pub line_count: usize,
     pub imports: Vec<Import>,
     pub extension: String,
+    pub path: String,
 }
 
 const JS: JavaScript = JavaScript {};
@@ -49,6 +50,7 @@ impl ParsedFile {
             line_count,
             imports,
             extension: extension.unwrap().to_string(),
+            path: path.to_str().unwrap().to_string(),
         };
         return Ok(parsed);
     }

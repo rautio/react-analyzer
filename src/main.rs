@@ -1,6 +1,7 @@
 use clap::Parser;
 use std::path::Path;
 use std::time::Instant;
+mod extractor;
 mod languages;
 mod parser;
 mod scanner;
@@ -20,8 +21,11 @@ fn main() {
         // Parse command line arguments
         let args = Cli::parse();
         let path = Path::new(&args.path);
-        scanner::scan(path);
+        println!("Analyzing: {}", path.display());
+        let files: Vec<parser::ParsedFile> = scanner::scan(path);
+        let (summary, output) = extractor::extract(files);
+        println!("\n{}\n", summary);
     }
     let elapsed = now.elapsed();
-    println!("Time: {:.2?}", elapsed);
+    println!("Done in: {:.2?}!", elapsed);
 }
