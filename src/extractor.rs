@@ -6,13 +6,14 @@ pub struct Summary {
     pub line_count: usize,
     pub import_count: usize,
     pub file_count: usize,
+    pub unused_file_count: usize,
 }
 impl std::fmt::Display for Summary {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "Total Files:     {}\nTotal Lines:     {}\nTotal Imports:   {}",
-            self.file_count, self.line_count, self.import_count
+            "Total Files:     {}\nTotal Lines:     {}\nTotal Imports:   {}\nDead Files:      {}",
+            self.file_count, self.line_count, self.import_count, self.unused_file_count
         )
     }
 }
@@ -20,6 +21,7 @@ impl std::fmt::Display for Summary {
 #[derive(Serialize)]
 pub struct Output {
     import_graph: ImportGraph,
+    dead_files: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -42,6 +44,22 @@ pub struct Node {
     file_name: Option<String>,
     extension: Option<String>,
     line_count: Option<usize>,
+}
+
+pub fn extract_dead_files(graph: &ImportGraph) -> Vec<String> {
+    let mut connected_nodes: HashMap<usize, bool> = HashMap::new();
+    // Iterate edges to gather all nodes that are imported or references
+    for e in &graph.edges {
+        connected_nodes.insert(e.source, true);
+        connected_nodes.insert(e.target, true);
+    }
+    let mut dead_files: Vec<String> = Vec::new();
+    for n in &graph.nodes {
+        if !connected_nodes.contains_key(&n.id) {
+            dead_files.push(n.path.clone())
+        }
+    }
+    return dead_files;
 }
 
 pub fn extract_import_graph(files: &Vec<ParsedFile>) -> ImportGraph {
@@ -113,6 +131,7 @@ pub fn extract(files: Vec<ParsedFile>) -> (Summary, Output) {
     let mut line_count = 0;
     let mut import_count: usize = 0;
     let import_graph = extract_import_graph(&files);
+    let dead_files = extract_dead_files(&import_graph);
     for file in files {
         line_count += file.line_count;
         import_count += file.imports.len();
@@ -122,7 +141,11 @@ pub fn extract(files: Vec<ParsedFile>) -> (Summary, Output) {
             line_count,
             import_count,
             file_count,
+            unused_file_count: dead_files.len(),
         },
-        Output { import_graph },
+        Output {
+            import_graph,
+            dead_files,
+        },
     );
 }
