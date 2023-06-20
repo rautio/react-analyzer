@@ -39,8 +39,9 @@ pub struct Edge {
 pub struct Node {
     id: usize,
     path: String,
-    // file_name: String,
-    // extension: String,
+    file_name: Option<String>,
+    extension: Option<String>,
+    line_count: Option<usize>,
 }
 
 pub fn extract_import_graph(files: &Vec<ParsedFile>) -> ImportGraph {
@@ -57,28 +58,47 @@ pub fn extract_import_graph(files: &Vec<ParsedFile>) -> ImportGraph {
                 Node {
                     id: node_count,
                     path: file_path.to_string(),
-                    // file_name: file.name,
-                    // extension: file.extension,
+                    file_name: Some(file.name.clone()),
+                    extension: Some(file.extension.clone()),
+                    line_count: Some(file.line_count),
                 },
             );
             node_count += 1;
+        } else {
+            // Exists, make sure we have all data populated
+            let mut node = node_map.get_mut(file_path).unwrap();
+            if node.file_name == None {
+                node.file_name = Some(file.name.clone());
+            }
+            if node.extension == None {
+                node.extension = Some(file.extension.clone());
+            }
+            if node.line_count == None {
+                node.line_count = Some(file.line_count);
+            }
         }
         // Create source file nodes and edges
         for import in &file.imports {
-            let src = &import.source;
-            if !node_map.contains_key(src) {
+            let mut src = import.source.clone();
+            if src.ends_with('/') {
+                src.pop();
+            }
+            if !node_map.contains_key(&src) {
                 node_map.insert(
                     src.to_string(),
                     Node {
                         id: node_count,
                         path: src.to_string(),
+                        file_name: None,
+                        extension: None,
+                        line_count: None,
                     },
                 );
                 node_count += 1;
             }
             edges.push(Edge {
                 id: edge_count,
-                source: node_map.get(src).unwrap().id,
+                source: node_map.get(&src).unwrap().id,
                 target: node_map.get(file_path).unwrap().id,
             });
             edge_count += 1;

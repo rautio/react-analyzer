@@ -11,4 +11,5 @@ pub struct Import {
 pub trait Language {
     fn is_import(&self, line: &String) -> bool;
     fn parse_import(&self, line: &String, current_path: &Path) -> Import;
+    fn get_file_name(&self, path: &Path) -> String;
 }

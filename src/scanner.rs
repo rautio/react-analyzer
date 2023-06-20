@@ -4,23 +4,24 @@ use std::fs::metadata;
 use std::path::Path;
 
 /// Lists all files in given diretory path.
-fn list_files(path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<ParsedFile> {
+fn list_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<ParsedFile> {
     let mut files: Vec<ParsedFile> = Vec::new();
     // Read path and validate
-    for entry in path.read_dir().expect("Unable to read directory.") {
+    for entry in root_path.read_dir().expect("Unable to read directory.") {
         if let Ok(entry) = entry {
-            let md = metadata(entry.path()).unwrap();
+            let file_path = &entry.path();
+            let md = metadata(file_path).unwrap();
             // If matches ignore, skip
-            let name = &entry.path().display().to_string();
-            if ignore_pattern.is_match(name) {
+            let name = file_path.display().to_string();
+            if ignore_pattern.is_match(&name) {
                 continue;
             }
             if md.is_dir() {
-                files.append(&mut list_files(&entry.path(), pattern, ignore_pattern));
+                files.append(&mut list_files(&file_path, pattern, ignore_pattern));
             } else {
                 // Only add file if it matches pattern
-                if pattern.is_match(name) {
-                    let parsed = ParsedFile::new(&entry.path());
+                if pattern.is_match(&name) {
+                    let parsed = ParsedFile::new(&file_path);
                     if let Ok(p) = parsed {
                         files.push(p)
                     }
@@ -34,7 +35,7 @@ fn list_files(path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Parse
 /// Scan a given path
 pub fn scan(path: &Path) -> Vec<ParsedFile> {
     // Add as CLI parameters and read from ignore file
-    let ignore_pattern: Regex = Regex::new(r"node_modules").unwrap();
+    let ignore_pattern: Regex = Regex::new(r"node_modules|.*.test.js").unwrap();
     let pattern = Regex::new(r"^.*\.(jsx|js|tsx|ts)$").unwrap();
 
     return list_files(path, &pattern, &ignore_pattern);

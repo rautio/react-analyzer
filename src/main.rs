@@ -21,9 +21,9 @@ fn main() {
     {
         // Parse command line arguments
         let args = Cli::parse();
-        let path = Path::new(&args.path);
-        println!("Analyzing: {}", path.display());
-        let files: Vec<parser::ParsedFile> = scanner::scan(path);
+        let root = Path::new(&args.path);
+        println!("Analyzing: {}", root.display());
+        let files: Vec<parser::ParsedFile> = scanner::scan(root);
         let (summary, output) = extractor::extract(files);
         let _ = output::write_output(output);
         println!("\n{}\n", summary);

@@ -50,7 +50,7 @@ impl ParsedFile {
         let parsed = ParsedFile {
             line_count,
             imports,
-            name: path.file_name().unwrap().to_str().unwrap().to_string(),
+            name: lang.get_file_name(&path),
             extension: extension.unwrap().to_string(),
             path: path.to_str().unwrap().to_string(),
         };
