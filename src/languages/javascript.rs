@@ -7,7 +7,7 @@ use std::path::Path;
 
 lazy_static! {
     static ref IMPORT_REGEX: Regex = Regex::new(
-        r#"^import(\s+?(?:(?:(?:[\w*\s{},]*)\s)+from\s+?)|)(?:(?:"(.*?)")|(?:'(.*?)'))[\s]*?(?:;|$|)"#,
+        r#"^import\s+?((?:(?:(?:[\w*\s{},]*)\s)+from\s+?)|)(?:(?:"(.*?)")|(?:'(.*?)'))[\s]*?(?:;|$|)"#,
     )
     .unwrap();
 }
@@ -66,5 +66,42 @@ impl Language for JavaScript {
             source: source.to_string(),
             names: vec![names.to_string()],
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_is_import() {
+        let lang = JavaScript {};
+        let true_values = [
+            "import videos from './videos/index.js'",
+            "import * from \"foo\"",
+            "import test, { bar } from \"foo\"",
+            "import rick from \"morty\"",
+            "import { rick, roll } from \"foo\";",
+            "import { rick, roll } from 'foo';",
+            "import * from 'foo';",
+            "import 'module-name'",
+            "import \"module-name\"",
+            "import {
+                something
+            } from \"./test/okbb\"",
+        ];
+        for val in true_values {
+            assert_eq!(lang.is_import(&String::from(val)), true);
+        }
+        let false_values = [
+            "import* from 'foo';",
+            "import * from \"foo';",
+            "const f = 2;",
+            "import \"module-name'",
+            "importing hya from 'ttt'",
+            "import fbsfrom ''",
+        ];
+        for val in false_values {
+            assert_eq!(lang.is_import(&String::from(val)), false);
+        }
     }
 }
