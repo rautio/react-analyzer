@@ -1,8 +1,14 @@
 use super::Language;
 use crate::languages;
+use crate::languages::ParsedFile;
+use crate::languages::TestFile;
 use lazy_static::lazy_static;
 use path_absolutize::*;
 use regex::Regex;
+use std::fs::File;
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::Error;
 use std::path::Path;
 
 lazy_static! {
@@ -10,11 +16,61 @@ lazy_static! {
         r#"^import\s+?((?:(?:(?:[\w*\s{},]*)\s)+from\s+?)|)(?:(?:"(.*?)")|(?:'(.*?)'))[\s]*?(?:;|$|)"#,
     )
     .unwrap();
+static ref TEST_REGEX: Regex = Regex::new(r#"(test|it)\(('|").*('|"),"#,).unwrap();
+static ref SKIPPED_REGEX: Regex = Regex::new(r#"(test.skip|it.skip)\(('|").*('|"),"#,).unwrap();
 }
 
 pub struct JavaScript {}
 
 impl Language for JavaScript {
+    fn parse_file(&self, path: &Path) -> Result<ParsedFile, Error> {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        let mut imports = Vec::new();
+        let mut line_count = 0;
+        for l in reader.lines() {
+            if let Ok(cur_line) = l {
+                if self.is_import(&cur_line) {
+                    imports.push(self.parse_import(&cur_line, &path))
+                }
+            }
+            line_count += 1;
+        }
+        let parsed = ParsedFile {
+            line_count,
+            imports,
+            name: self.get_file_name(&path),
+            extension: path.extension().unwrap().to_str().unwrap().to_string(),
+            path: path.to_str().unwrap().to_string(),
+        };
+        return Ok(parsed);
+    }
+    fn parse_test_file(&self, path: &Path) -> Result<TestFile, Error> {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        let mut line_count = 0;
+        let mut test_count = 0;
+        let mut skipped_test_count = 0;
+        for l in reader.lines() {
+            if let Ok(cur_line) = l {
+                if let Some(_) = TEST_REGEX.find(&cur_line) {
+                    test_count += 1;
+                }
+                if let Some(_) = SKIPPED_REGEX.find(&cur_line) {
+                    skipped_test_count += 1;
+                }
+            }
+            line_count += 1;
+        }
+        let parsed: TestFile = TestFile {
+            name: self.get_file_name(&path),
+            path: path.to_str().unwrap().to_string(),
+            line_count,
+            test_count,
+            skipped_test_count,
+        };
+        return Ok(parsed);
+    }
     fn get_file_name(&self, path: &Path) -> String {
         let mut name = path.file_stem().unwrap();
         // If its an index file we want to use the folder as the file name

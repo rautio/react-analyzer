@@ -1,4 +1,4 @@
-use super::parser::ParsedFile;
+use super::languages::ParsedFile;
 use serde::Serialize;
 use std::collections::HashMap;
 
