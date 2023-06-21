@@ -1,4 +1,5 @@
 use clap::Parser;
+use regex::Regex;
 use std::path::Path;
 use std::time::Instant;
 mod extractor;
@@ -23,7 +24,15 @@ fn main() {
         let args = Cli::parse();
         let root = Path::new(&args.path);
         println!("Analyzing: {}", root.display());
-        let files: Vec<parser::ParsedFile> = scanner::scan(root);
+        // TODO: Add as CLI parameters and read from ignore file
+        let pattern = Regex::new(r"^.*\.(jsx|js|tsx|ts)$").unwrap();
+        println!("Scan pattern: {}", pattern);
+        let ignore_pattern: Regex = Regex::new(r"node_modules|.*.test.js").unwrap();
+        println!("Ignore pattern: {}", ignore_pattern);
+        let files: Vec<parser::ParsedFile> = scanner::scan(root, &pattern, &ignore_pattern);
+        let test_pattern: Regex = Regex::new(r".*.(cy|test|spec|unit).(jsx|tsx|js|ts)").unwrap();
+        let _: Vec<parser::TestFile> =
+            scanner::scan_test_files(root, &test_pattern, &ignore_pattern);
         let (summary, output) = extractor::extract(files);
         let _ = output::write_output(output);
         println!("\n{}\n", summary);

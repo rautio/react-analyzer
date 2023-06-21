@@ -23,6 +23,7 @@ impl Language for JavaScript {
         }
         return name.to_str().unwrap().to_string();
     }
+    /// Is the given line read from a file an import statement.
     fn is_import(&self, line: &String) -> bool {
         if let Some(_) = IMPORT_REGEX.find(&line) {
             return true;
