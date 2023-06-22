@@ -26,9 +26,6 @@ pub struct TestFile {
 }
 
 pub trait Language {
-    fn is_import(&self, line: &String) -> bool;
-    fn parse_import(&self, line: &String, current_path: &Path) -> Import;
-    fn get_file_name(&self, path: &Path) -> String;
     fn parse_file(&self, path: &Path) -> Result<ParsedFile, Error>;
     fn parse_test_file(&self, path: &Path) -> Result<TestFile, Error>;
 }
