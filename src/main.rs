@@ -29,7 +29,7 @@ fn main() {
         let ignore_pattern: Regex = Regex::new(r"node_modules|.*.test.js").unwrap();
         println!("Ignore pattern: {}", ignore_pattern);
         let files: Vec<languages::ParsedFile> = scanner::scan(root, &pattern, &ignore_pattern);
-        let test_pattern: Regex = Regex::new(r".*.(cy|test|spec|unit).(jsx|tsx|js|ts)").unwrap();
+        let test_pattern: Regex = Regex::new(r".*.(cy|test|spec|unit).(jsx|tsx|js|ts)$").unwrap();
         let _: Vec<languages::TestFile> =
             scanner::scan_test_files(root, &test_pattern, &ignore_pattern);
         let (summary, output) = extractor::extract(files);

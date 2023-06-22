@@ -1,12 +1,10 @@
-use crate::languages::javascript::JavaScript;
-use crate::languages::Language;
+use crate::languages::parse_file;
+use crate::languages::parse_test_file;
 use crate::languages::ParsedFile;
 use crate::languages::TestFile;
 use regex::Regex;
 use std::fs::metadata;
 use std::path::Path;
-
-const JS: JavaScript = JavaScript {};
 
 fn find_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<String> {
     let mut files: Vec<String> = Vec::new();
@@ -37,7 +35,8 @@ pub fn scan(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Pa
     let files: Vec<String> = find_files(root_path, pattern, ignore_pattern);
     let mut parsed_files: Vec<ParsedFile> = Vec::new();
     for path in files {
-        let parsed = JS.parse_file(Path::new(&path));
+        let file_path = Path::new(&path);
+        let parsed = parse_file(&file_path);
         if let Ok(p) = parsed {
             parsed_files.push(p);
         }
@@ -49,7 +48,7 @@ pub fn scan_test_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex
     let files: Vec<String> = find_files(root_path, pattern, ignore_pattern);
     let mut test_files: Vec<TestFile> = Vec::new();
     for path in files {
-        let parsed = JS.parse_test_file(Path::new(&path));
+        let parsed = parse_test_file(Path::new(&path));
         if let Ok(t) = parsed {
             test_files.push(t);
         }

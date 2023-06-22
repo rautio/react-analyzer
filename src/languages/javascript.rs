@@ -23,7 +23,7 @@ static ref SKIPPED_REGEX: Regex = Regex::new(r#"(test.skip|it.skip)\(('|").*('|"
 pub struct JavaScript {}
 
 impl JavaScript {
-    fn get_file_name(&self, path: &Path) -> String {
+    pub fn get_file_name(&self, path: &Path) -> String {
         let mut name = path.file_stem().unwrap();
         // If its an index file we want to use the folder as the file name
         if name == "index" {
@@ -32,13 +32,13 @@ impl JavaScript {
         return name.to_str().unwrap().to_string();
     }
     /// Is the given line read from a file an import statement.
-    fn is_import(&self, line: &String) -> bool {
+    pub fn is_import(&self, line: &String) -> bool {
         if let Some(_) = IMPORT_REGEX.find(&line) {
             return true;
         }
         return false;
     }
-    fn parse_import(&self, line: &String, current_path: &Path) -> languages::Import {
+    pub fn parse_import(&self, line: &String, current_path: &Path) -> languages::Import {
         let captures = IMPORT_REGEX.captures(&line).unwrap();
         let names = captures.get(1).map_or("", |m| m.as_str());
         let double_quote_import = captures.get(2).map_or("", |m| m.as_str());
