@@ -22,3 +22,6 @@ Cargo.lock
 # Build
 report.json
 report.html
+
+# Dev
+.vscode

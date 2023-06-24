@@ -21,6 +21,7 @@ pub struct ParsedFile {
     pub name: String,
     pub extension: String,
     pub path: String,
+    pub variable_count: usize,
 }
 
 pub struct TestFile {

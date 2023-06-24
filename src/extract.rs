@@ -1,4 +1,5 @@
 use super::languages::ParsedFile;
+use super::languages::TestFile;
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -7,13 +8,14 @@ pub struct Summary {
     pub import_count: usize,
     pub file_count: usize,
     pub unused_file_count: usize,
+    pub variable_count: usize,
 }
 impl std::fmt::Display for Summary {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "Total Files:     {}\nTotal Lines:     {}\nTotal Imports:   {}\nDead Files:      {}",
-            self.file_count, self.line_count, self.import_count, self.unused_file_count
+            "Total Files:     {}\nTotal Lines:     {}\nTotal Imports:   {}\nDead Files:      {}\nVariables Created: {}",
+            self.file_count, self.line_count, self.import_count, self.unused_file_count, self.variable_count
         )
     }
 }
@@ -132,9 +134,11 @@ pub fn extract(files: Vec<ParsedFile>) -> (Summary, Output) {
     let mut import_count: usize = 0;
     let import_graph = extract_import_graph(&files);
     let dead_files = extract_dead_files(&import_graph);
+    let mut variable_count = 0;
     for file in files {
         line_count += file.line_count;
         import_count += file.imports.len();
+        variable_count += file.variable_count;
     }
     return (
         Summary {
@@ -142,10 +146,48 @@ pub fn extract(files: Vec<ParsedFile>) -> (Summary, Output) {
             import_count,
             file_count,
             unused_file_count: dead_files.len(),
+            variable_count,
         },
         Output {
             import_graph,
             dead_files,
         },
+    );
+}
+
+#[derive(Serialize)]
+pub struct TestOutput {}
+pub struct TestSummary {
+    count: usize,
+    skipped_count: usize,
+    line_count: usize,
+}
+
+impl std::fmt::Display for TestSummary {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "Total Tests:     {}\nSkipped Tests:     {}\nTotal Lines:   {}",
+            self.count, self.skipped_count, self.line_count
+        )
+    }
+}
+
+pub fn extract_test_files(test_files: Vec<TestFile>) -> (TestSummary, TestOutput) {
+    let mut test_count = 0;
+    let mut skipped_test_count = 0;
+    let mut test_line_count = 0;
+    for test_file in &test_files {
+        test_count += test_file.test_count;
+        skipped_test_count += test_file.skipped_test_count;
+        test_line_count += test_file.line_count;
+    }
+    return (
+        TestSummary {
+            count: test_count,
+            skipped_count: skipped_test_count,
+            line_count: test_line_count,
+        },
+        TestOutput {},
     );
 }

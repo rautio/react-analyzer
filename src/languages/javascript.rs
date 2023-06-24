@@ -16,8 +16,10 @@ lazy_static! {
         r#"^import\s+?((?:(?:(?:[\w*\s{},]*)\s)+from\s+?)|)(?:(?:"(.*?)")|(?:'(.*?)'))[\s]*?(?:;|$|)"#,
     )
     .unwrap();
-static ref TEST_REGEX: Regex = Regex::new(r#"(test|it)\(('|").*('|"),"#,).unwrap();
-static ref SKIPPED_REGEX: Regex = Regex::new(r#"(test.skip|it.skip)\(('|").*('|"),"#,).unwrap();
+    static ref TEST_REGEX: Regex = Regex::new(r#"(test|it)\(('|").*('|"),"#,).unwrap();
+    static ref SKIPPED_REGEX: Regex = Regex::new(r#"(test.skip|it.skip)\(('|").*('|"),"#,).unwrap();
+    static ref VARIABLE_REGEX: Regex = Regex::new(r"^\s?(let|var|const)\s?(.*) =").unwrap();
+    // static ref EXPORT_REGEX: Regex = Regex::new(r"^export (let|var|const)\s?(.*) =").unwrap();
 }
 
 pub struct JavaScript {}
@@ -84,10 +86,14 @@ impl Language for JavaScript {
         let reader = BufReader::new(file);
         let mut imports = Vec::new();
         let mut line_count = 0;
+        let mut variable_count = 0;
         for l in reader.lines() {
             if let Ok(cur_line) = l {
                 if self.is_import(&cur_line) {
                     imports.push(self.parse_import(&cur_line, &path))
+                }
+                if VARIABLE_REGEX.is_match(&cur_line) {
+                    variable_count += 1;
                 }
             }
             line_count += 1;
@@ -98,6 +104,7 @@ impl Language for JavaScript {
             name: self.get_file_name(&path),
             extension: path.extension().unwrap().to_str().unwrap().to_string(),
             path: path.to_str().unwrap().to_string(),
+            variable_count,
         };
         return Ok(parsed);
     }

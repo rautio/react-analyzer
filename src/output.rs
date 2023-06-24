@@ -1,4 +1,4 @@
-use super::extractor::Output;
+use super::extract::Output;
 use serde_json;
 use std::fs::File;
 use std::io::BufWriter;

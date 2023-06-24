@@ -53,17 +53,5 @@ pub fn scan_test_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex
             test_files.push(t);
         }
     }
-    let mut test_count = 0;
-    let mut skipped_test_count = 0;
-    let mut test_line_count = 0;
-    for test_file in &test_files {
-        test_count += test_file.test_count;
-        skipped_test_count += test_file.skipped_test_count;
-        test_line_count += test_file.line_count;
-    }
-    println!("");
-    println!("Test Count: {}", test_count);
-    println!("Skipped Test Count: {}", skipped_test_count);
-    println!("Test Line Count: {}", test_line_count);
     return test_files;
 }
