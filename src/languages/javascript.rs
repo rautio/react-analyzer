@@ -16,6 +16,7 @@ lazy_static! {
         r#"^import\s+?((?:(?:(?:[\w*\s{},]*)\s)+from\s+?)|)(?:(?:"(.*?)")|(?:'(.*?)'))[\s]*?(?:;|$|)"#,
     )
     .unwrap();
+    static ref IMPORT_NAMES_REGEX: Regex = Regex::new(r"\s?(.*?),?(\{(.*)\})? from?").unwrap();
     static ref TEST_REGEX: Regex = Regex::new(r#"(test|it)\(('|").*('|"),"#,).unwrap();
     static ref SKIPPED_REGEX: Regex = Regex::new(r#"(test.skip|it.skip)\(('|").*('|"),"#,).unwrap();
     static ref VARIABLE_REGEX: Regex = Regex::new(r"^\s?(let|var|const)\s?(.*) =").unwrap();
@@ -42,7 +43,19 @@ impl JavaScript {
     }
     pub fn parse_import(&self, line: &String, current_path: &Path) -> languages::Import {
         let captures = IMPORT_REGEX.captures(&line).unwrap();
-        let names = captures.get(1).map_or("", |m| m.as_str());
+        // Capture imported names
+        let raw_import_names = captures.get(1).map_or("", |m| m.as_str());
+        // Then import could not have any named imports like: "import 'style.css';"
+        let mut default_import = "";
+        let mut named_imports = "";
+        let name_captures_option = IMPORT_NAMES_REGEX.captures(raw_import_names);
+        if !name_captures_option.is_none() {
+            let name_captures = name_captures_option.unwrap();
+            // let name_captures = IMPORT_NAMES_REGEX.captures(raw_import_names).unwrap();
+            default_import = name_captures.get(1).map_or("", |m| m.as_str());
+            named_imports = name_captures.get(3).map_or("", |m| m.as_str());
+        }
+        // Capture import source path
         let double_quote_import = captures.get(2).map_or("", |m| m.as_str());
         let mut source = double_quote_import;
         if source == "" {
@@ -69,13 +82,15 @@ impl JavaScript {
                     .to_str()
                     .unwrap()
                     .to_string(),
-                names: vec![names.to_string()],
+                named: named_imports.split(',').map(str::to_string).collect(),
+                default: default_import.to_string(),
             };
         }
         // Either an alias, absolute path or node_module
         return languages::Import {
             source: source.to_string(),
-            names: vec![names.to_string()],
+            named: named_imports.split(',').map(str::to_string).collect(),
+            default: default_import.to_string(),
         };
     }
 }

@@ -12,7 +12,8 @@ use self::unknown::Unknown;
 
 pub struct Import {
     pub source: String,
-    pub names: Vec<String>,
+    pub named: Vec<String>,
+    pub default: String,
 }
 #[derive(Clone, Debug)]
 pub struct ParsedFile {
