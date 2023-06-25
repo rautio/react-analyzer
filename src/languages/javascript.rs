@@ -1,5 +1,6 @@
 use super::Language;
 use crate::languages;
+use crate::languages::Export;
 use crate::languages::ParsedFile;
 use crate::languages::TestFile;
 use lazy_static::lazy_static;
@@ -20,7 +21,7 @@ lazy_static! {
     static ref TEST_REGEX: Regex = Regex::new(r#"(test|it)\(('|").*('|"),"#,).unwrap();
     static ref SKIPPED_REGEX: Regex = Regex::new(r#"(test.skip|it.skip)\(('|").*('|"),"#,).unwrap();
     static ref VARIABLE_REGEX: Regex = Regex::new(r"^\s?(let|var|const)\s?(.*) =").unwrap();
-    // static ref EXPORT_REGEX: Regex = Regex::new(r"^export (let|var|const|default|\*)\s?(.*) =").unwrap();
+    static ref EXPORT_REGEX: Regex = Regex::new(r"^export (.*)").unwrap();
 }
 
 pub struct JavaScript {}
@@ -34,9 +35,16 @@ impl JavaScript {
         }
         return name.to_str().unwrap().to_string();
     }
-    /// Is the given line read from a file an import statement.
+    /// Is the given string an import statement.
     pub fn is_import(&self, line: &String) -> bool {
         if let Some(_) = IMPORT_REGEX.find(&line) {
+            return true;
+        }
+        return false;
+    }
+    /// Is the given string an export statement
+    pub fn is_export(&self, line: &String) -> bool {
+        if let Some(_) = EXPORT_REGEX.find(&line) {
             return true;
         }
         return false;
@@ -93,6 +101,17 @@ impl JavaScript {
             default: default_import.to_string(),
         };
     }
+    pub fn parse_export(&self, line: &String, current_path: &Path) -> languages::Export {
+        let captures: regex::Captures<'_> = EXPORT_REGEX.captures(&line).unwrap();
+        let default_export = "";
+        let named_exports = captures.get(1).map_or("", |m| m.as_str());
+        return Export {
+            file_path: current_path.display().to_string(),
+            named: named_exports.split(',').map(str::to_string).collect(),
+            default: default_export.to_string(),
+            source: String::from(""),
+        };
+    }
 }
 
 impl Language for JavaScript {
@@ -100,6 +119,7 @@ impl Language for JavaScript {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let mut imports = Vec::new();
+        let mut exports: Vec<Export> = Vec::new();
         let mut line_count = 0;
         let mut variable_count = 0;
         for l in reader.lines() {
@@ -110,15 +130,16 @@ impl Language for JavaScript {
                 if VARIABLE_REGEX.is_match(&cur_line) {
                     variable_count += 1;
                 }
-                // if EXPORT_REGEX.is_match(&cur_line) {
-                //     let export_captures = EXPORT_REGEX.captures(&cur_line).unwrap();
-                // }
+                if self.is_export(&cur_line) {
+                    exports.push(self.parse_export(&cur_line, &path))
+                }
             }
             line_count += 1;
         }
         let parsed = ParsedFile {
             line_count,
             imports,
+            exports,
             name: self.get_file_name(&path),
             extension: path.extension().unwrap().to_str().unwrap().to_string(),
             path: path.to_str().unwrap().to_string(),

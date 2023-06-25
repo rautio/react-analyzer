@@ -16,6 +16,7 @@ impl Language for Unknown {
         let parsed = ParsedFile {
             line_count: reader.lines().count(),
             imports: Vec::new(),
+            exports: Vec::new(),
             name: path.file_name().unwrap().to_str().unwrap().to_string(),
             extension: path.extension().unwrap().to_str().unwrap().to_string(),
             path: path.to_str().unwrap().to_string(),

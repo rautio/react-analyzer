@@ -15,10 +15,19 @@ pub struct Import {
     pub named: Vec<String>,
     pub default: String,
 }
+
+#[derive(Clone, Debug)]
+pub struct Export {
+    pub file_path: String,
+    pub named: Vec<String>,
+    pub default: String,
+    pub source: String,
+}
 #[derive(Clone, Debug)]
 pub struct ParsedFile {
     pub line_count: usize,
     pub imports: Vec<Import>,
+    pub exports: Vec<Export>,
     pub name: String,
     pub extension: String,
     pub path: String,

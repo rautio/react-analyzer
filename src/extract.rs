@@ -167,7 +167,7 @@ impl std::fmt::Display for TestSummary {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "Total Tests:     {}\nSkipped Tests:     {}\nTotal Lines:   {}",
+            "Total Tests:     {}\nSkipped Tests:   {}\nTotal Lines:     {}",
             self.count, self.skipped_count, self.line_count
         )
     }
