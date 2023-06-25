@@ -20,7 +20,7 @@ lazy_static! {
     static ref TEST_REGEX: Regex = Regex::new(r#"(test|it)\(('|").*('|"),"#,).unwrap();
     static ref SKIPPED_REGEX: Regex = Regex::new(r#"(test.skip|it.skip)\(('|").*('|"),"#,).unwrap();
     static ref VARIABLE_REGEX: Regex = Regex::new(r"^\s?(let|var|const)\s?(.*) =").unwrap();
-    // static ref EXPORT_REGEX: Regex = Regex::new(r"^export (let|var|const)\s?(.*) =").unwrap();
+    // static ref EXPORT_REGEX: Regex = Regex::new(r"^export (let|var|const|default|\*)\s?(.*) =").unwrap();
 }
 
 pub struct JavaScript {}
@@ -110,6 +110,9 @@ impl Language for JavaScript {
                 if VARIABLE_REGEX.is_match(&cur_line) {
                     variable_count += 1;
                 }
+                // if EXPORT_REGEX.is_match(&cur_line) {
+                //     let export_captures = EXPORT_REGEX.captures(&cur_line).unwrap();
+                // }
             }
             line_count += 1;
         }

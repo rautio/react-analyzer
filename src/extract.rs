@@ -191,3 +191,10 @@ pub fn extract_test_files(test_files: Vec<TestFile>) -> (TestSummary, TestOutput
         TestOutput {},
     );
 }
+
+// pub struct ExportSummary {}
+// pub struct ExportOutput {}
+
+// pub fn extract_exports(files: Vec<ParsedFile>) -> (ExportSummary, ExportOutput) {
+//     return (ExportSummary {}, ExportOutput {});
+// }
