@@ -10,7 +10,7 @@ mod scan;
 
 #[derive(Parser)]
 #[command(author, version)]
-#[command(about = "norppa - a static code analyzer for React based projects")]
+#[command(about = "react-analyzer - a static code analyzer for React based projects")]
 struct Cli {
     /// Path to folder root
     path: std::path::PathBuf,

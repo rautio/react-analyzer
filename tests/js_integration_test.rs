@@ -1,10 +1,10 @@
-use norppa::languages::javascript::JavaScript;
-use norppa::languages::Import;
+use react_analyzer::languages::javascript::JavaScript;
+use react_analyzer::languages::Import;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::path::PathBuf;
 use std::path::Path;
+use std::path::PathBuf;
 
 fn read_file(file_path: &str) -> Result<BufReader<File>, Box<dyn std::error::Error>> {
     let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -46,18 +46,62 @@ fn test_parse_import() -> Result<(), Box<dyn std::error::Error>> {
     let lang = JavaScript {};
     let reader = read_file("tests/mocks/import.js").unwrap();
     let expected = [
-        Import {source: String::from("module-name"), default: String::from("defaultExport"), named: Vec::new()},
-        Import {source: String::from("module-name"), default: String::from("* as name"), named: Vec::new()}, // Wrong for now
-        Import {source: String::from("module-name"), default: String::from(""), named: [String::from("export1")].to_vec()},
-        Import {source: String::from("module-name"), default: String::from(""), named: [String::from("export1 as alias1")].to_vec()}, // Wrong for now
-        Import {source: String::from("module-name"), default: String::from(""), named: [String::from("default as alias")].to_vec()}, // Wrong for now
-        Import {source: String::from("module-name"), default: String::from(""), named: [String::from("export1"), String::from("export2")].to_vec()},
-        Import {source: String::from("module-name"), default: String::from(""), named: Vec::new()}, // skipped
-        Import {source: String::from("module-name"), default: String::from(""), named: Vec::new()}, // skipped
-        Import {source: String::from("module-name"), default: String::from(""), named: Vec::new()}, // skipped
-        Import {source: String::from("module-name"), default: String::from("defaultExport, * as name"), named: Vec::new()}, // Wrong for now
-        Import {source: String::from("module-name"), default: String::from(""), named: Vec::new()},
-        ];
+        Import {
+            source: String::from("module-name"),
+            default: String::from("defaultExport"),
+            named: Vec::new(),
+        },
+        Import {
+            source: String::from("module-name"),
+            default: String::from("* as name"),
+            named: Vec::new(),
+        }, // Wrong for now
+        Import {
+            source: String::from("module-name"),
+            default: String::from(""),
+            named: [String::from("export1")].to_vec(),
+        },
+        Import {
+            source: String::from("module-name"),
+            default: String::from(""),
+            named: [String::from("export1 as alias1")].to_vec(),
+        }, // Wrong for now
+        Import {
+            source: String::from("module-name"),
+            default: String::from(""),
+            named: [String::from("default as alias")].to_vec(),
+        }, // Wrong for now
+        Import {
+            source: String::from("module-name"),
+            default: String::from(""),
+            named: [String::from("export1"), String::from("export2")].to_vec(),
+        },
+        Import {
+            source: String::from("module-name"),
+            default: String::from(""),
+            named: Vec::new(),
+        }, // skipped
+        Import {
+            source: String::from("module-name"),
+            default: String::from(""),
+            named: Vec::new(),
+        }, // skipped
+        Import {
+            source: String::from("module-name"),
+            default: String::from(""),
+            named: Vec::new(),
+        }, // skipped
+        Import {
+            source: String::from("module-name"),
+            default: String::from("defaultExport, * as name"),
+            named: Vec::new(),
+        }, // Wrong for now
+        Import {
+            source: String::from("module-name"),
+            default: String::from(""),
+            named: Vec::new(),
+        },
+    ];
     for (i, line) in reader.lines().enumerate() {
         let l = &line?;
         if !l.starts_with("//") && !l.is_empty() {

@@ -1,4 +1,4 @@
-# norppa
+# react-analyzer
 
 Static code analyzer for React projects.
 

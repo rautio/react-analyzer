@@ -78,7 +78,11 @@ impl JavaScript {
         }
         let mut named = Vec::new();
         if !named_imports.is_empty() {
-            named = named_imports.split(',').map(str::trim).map(str::to_string).collect();
+            named = named_imports
+                .split(',')
+                .map(str::trim)
+                .map(str::to_string)
+                .collect();
         }
         let source_path = Path::new(&source);
         // Relative path, convert it to an absolute path
