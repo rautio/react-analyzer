@@ -50,6 +50,9 @@ impl JavaScript {
         return false;
     }
     pub fn parse_import(&self, line: &String, current_path: &Path) -> languages::Import {
+        if !IMPORT_REGEX.is_match(&line) {
+            panic!("Not an import statement");
+        }
         let captures = IMPORT_REGEX.captures(&line).unwrap();
         // Capture imported names
         let raw_import_names = captures.get(1).map_or("", |m| m.as_str());
@@ -73,6 +76,10 @@ impl JavaScript {
         if source == "." {
             source = "";
         }
+        let mut named = Vec::new();
+        if !named_imports.is_empty() {
+            named = named_imports.split(',').map(str::trim).map(str::to_string).collect();
+        }
         let source_path = Path::new(&source);
         // Relative path, convert it to an absolute path
         if source_path.to_str().unwrap().to_string().starts_with('.') {
@@ -90,14 +97,14 @@ impl JavaScript {
                     .to_str()
                     .unwrap()
                     .to_string(),
-                named: named_imports.split(',').map(str::to_string).collect(),
+                named,
                 default: default_import.to_string(),
             };
         }
         // Either an alias, absolute path or node_module
         return languages::Import {
             source: source.to_string(),
-            named: named_imports.split(',').map(str::to_string).collect(),
+            named,
             default: default_import.to_string(),
         };
     }
