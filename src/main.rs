@@ -37,11 +37,11 @@ fn main() {
         // Scan Files
         let files: Vec<languages::ParsedFile> = scan::scan(root, &pattern, &ignore_pattern);
         let (summary, output) = extract::extract(files);
+        let _ = output::write_output(output);
         println!("=== File Summary ===\n{}\n", summary);
         // Scan Test Files
         let test_files: Vec<languages::TestFile> =
             scan::scan_test_files(root, &test_pattern, &ignore_pattern);
-        let _ = output::write_output(output);
         let (test_summary, _) = extract::extract_test_files(test_files);
         println!("=== Test Summary ===\n{}\n", test_summary);
     }

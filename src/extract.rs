@@ -24,6 +24,7 @@ impl std::fmt::Display for Summary {
 pub struct Output {
     import_graph: ImportGraph,
     dead_files: Vec<String>,
+    exports: Vec<FileExports>,
 }
 
 #[derive(Serialize)]
@@ -128,12 +129,63 @@ pub fn extract_import_graph(files: &Vec<ParsedFile>) -> ImportGraph {
     return ImportGraph { nodes, edges };
 }
 
+#[derive(Serialize)]
+pub struct Export {
+    name: String,
+    target: String,
+}
+
+#[derive(Serialize)]
+pub struct FileExports {
+    source: String,
+    exports: Vec<Export>,
+}
+
+pub fn extract_exports(files: &Vec<ParsedFile>, import_graph: &ImportGraph) -> Vec<FileExports> {
+    let mut file_exports: Vec<FileExports> = Vec::new();
+    let mut node_map: HashMap<String, &Node> = HashMap::new();
+    let mut node_id_map: HashMap<usize, &Node> = HashMap::new();
+    for node in &import_graph.nodes {
+        node_map.insert(node.path.clone(), node);
+        node_id_map.insert(node.id, node);
+    }
+    let mut edge_map: HashMap<usize, Vec<usize>> = HashMap::new();
+    for edge in &import_graph.edges {
+        if edge_map.contains_key(&edge.source) {
+            edge_map.get_mut(&edge.source);
+        } else {
+            edge_map.insert(edge.source, vec![edge.target]);
+        }
+    }
+    for file in files {
+        let mut exports = Vec::new();
+        if edge_map.contains_key(&node_map.get(&file.path).unwrap().id){
+            // Not all files have exports
+            let targets = edge_map.get(&node_map.get(&file.path).unwrap().id).unwrap();
+            for target in targets {
+                let e = Export {
+                    name: String::from(""),
+                    target: node_id_map.get(target).unwrap().path.clone(),
+                };
+                exports.push(e);
+            }
+        }
+        let export_file = FileExports {
+            source: file.path.clone(),
+            exports,
+        };
+        file_exports.push(export_file)
+    }
+    return file_exports;
+}
+
 pub fn extract(files: Vec<ParsedFile>) -> (Summary, Output) {
     let file_count = files.len();
     let mut line_count = 0;
     let mut import_count: usize = 0;
     let import_graph = extract_import_graph(&files);
     let dead_files = extract_dead_files(&import_graph);
+    let exports = extract_exports(&files, &import_graph);
     let mut variable_count = 0;
     for file in files {
         line_count += file.line_count;
@@ -151,6 +203,7 @@ pub fn extract(files: Vec<ParsedFile>) -> (Summary, Output) {
         Output {
             import_graph,
             dead_files,
+            exports,
         },
     );
 }
@@ -191,10 +244,3 @@ pub fn extract_test_files(test_files: Vec<TestFile>) -> (TestSummary, TestOutput
         TestOutput {},
     );
 }
-
-// pub struct ExportSummary {}
-// pub struct ExportOutput {}
-
-// pub fn extract_exports(files: Vec<ParsedFile>) -> (ExportSummary, ExportOutput) {
-//     return (ExportSummary {}, ExportOutput {});
-// }
