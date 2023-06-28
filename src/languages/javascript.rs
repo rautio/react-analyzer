@@ -49,7 +49,12 @@ impl JavaScript {
         }
         return false;
     }
-    pub fn parse_import(&self, line: &String, current_path: &Path, line_count: usize) -> languages::Import {
+    pub fn parse_import(
+        &self,
+        line: &String,
+        current_path: &Path,
+        line_count: usize,
+    ) -> languages::Import {
         if !IMPORT_REGEX.is_match(&line) {
             panic!("Not an import statement");
         }
@@ -114,7 +119,12 @@ impl JavaScript {
             line: line_count,
         };
     }
-    pub fn parse_export(&self, line: &String, current_path: &Path, line_count: usize) -> languages::Export {
+    pub fn parse_export(
+        &self,
+        line: &String,
+        current_path: &Path,
+        line_count: usize,
+    ) -> languages::Export {
         let captures: regex::Captures<'_> = EXPORT_REGEX.captures(&line).unwrap();
         let default_export = "";
         let named_exports = captures.get(1).map_or("", |m| m.as_str());

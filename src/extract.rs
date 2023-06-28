@@ -38,6 +38,8 @@ pub struct Edge {
     id: usize,
     source: usize,
     target: usize,
+    is_default: bool,
+    name: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -117,11 +119,15 @@ pub fn extract_import_graph(files: &Vec<ParsedFile>) -> ImportGraph {
                 );
                 node_count += 1;
             }
-            edges.push(Edge {
-                id: edge_count,
-                source: node_map.get(&src).unwrap().id,
-                target: node_map.get(file_path).unwrap().id,
-            });
+            for name in &import.named {
+                edges.push(Edge {
+                    id: edge_count,
+                    source: node_map.get(&src).unwrap().id,
+                    target: node_map.get(file_path).unwrap().id,
+                    is_default: !import.default.is_empty(),
+                    name: name.to_string(),
+                });
+            }
             edge_count += 1;
         }
     }

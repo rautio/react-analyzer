@@ -57,7 +57,7 @@ fn test_parse_import() -> Result<(), Box<dyn std::error::Error>> {
             default: String::from("* as name"), // Wrong for now
             named: Vec::new(),
             line: 1,
-        }, 
+        },
         Import {
             source: String::from("module-name"),
             default: String::from(""),
@@ -82,30 +82,33 @@ fn test_parse_import() -> Result<(), Box<dyn std::error::Error>> {
             named: [String::from("export1"), String::from("export2")].to_vec(),
             line: 5,
         },
-        Import { // skipped
+        Import {
+            // skipped
             source: String::from("module-name"),
             default: String::from(""),
             named: Vec::new(),
             line: 6,
         },
-        Import { // skipped
+        Import {
+            // skipped
             source: String::from("module-name"),
             default: String::from(""),
             named: Vec::new(),
             line: 7,
         },
-        Import { // skipped
+        Import {
+            // skipped
             source: String::from("module-name"),
             default: String::from(""),
             named: Vec::new(),
             line: 8,
-        }, 
+        },
         Import {
             source: String::from("module-name"),
-            default: String::from("defaultExport, * as name"),// Wrong for now
+            default: String::from("defaultExport, * as name"), // Wrong for now
             named: Vec::new(),
             line: 9,
-        }, 
+        },
         Import {
             source: String::from("module-name"),
             default: String::from(""),
@@ -116,7 +119,7 @@ fn test_parse_import() -> Result<(), Box<dyn std::error::Error>> {
     for (i, line) in reader.lines().enumerate() {
         let l = &line?;
         if !l.starts_with("//") && !l.is_empty() {
-            let import = lang.parse_import(l, Path::new("/"),i);
+            let import = lang.parse_import(l, Path::new("/"), i);
             let expect = &expected[i];
             assert_eq!(import.source, expect.source);
             assert_eq!(import.named, expect.named);
