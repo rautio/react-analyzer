@@ -50,62 +50,73 @@ fn test_parse_import() -> Result<(), Box<dyn std::error::Error>> {
             source: String::from("module-name"),
             default: String::from("defaultExport"),
             named: Vec::new(),
+            line: 0,
         },
         Import {
             source: String::from("module-name"),
-            default: String::from("* as name"),
+            default: String::from("* as name"), // Wrong for now
             named: Vec::new(),
-        }, // Wrong for now
+            line: 1,
+        }, 
         Import {
             source: String::from("module-name"),
             default: String::from(""),
             named: [String::from("export1")].to_vec(),
+            line: 2,
         },
         Import {
             source: String::from("module-name"),
             default: String::from(""),
-            named: [String::from("export1 as alias1")].to_vec(),
-        }, // Wrong for now
+            named: [String::from("export1 as alias1")].to_vec(), // Wrong for now
+            line: 3,
+        },
         Import {
             source: String::from("module-name"),
             default: String::from(""),
-            named: [String::from("default as alias")].to_vec(),
-        }, // Wrong for now
+            named: [String::from("default as alias")].to_vec(), // Wrong for now
+            line: 4,
+        },
         Import {
             source: String::from("module-name"),
             default: String::from(""),
             named: [String::from("export1"), String::from("export2")].to_vec(),
+            line: 5,
         },
+        Import { // skipped
+            source: String::from("module-name"),
+            default: String::from(""),
+            named: Vec::new(),
+            line: 6,
+        },
+        Import { // skipped
+            source: String::from("module-name"),
+            default: String::from(""),
+            named: Vec::new(),
+            line: 7,
+        },
+        Import { // skipped
+            source: String::from("module-name"),
+            default: String::from(""),
+            named: Vec::new(),
+            line: 8,
+        }, 
+        Import {
+            source: String::from("module-name"),
+            default: String::from("defaultExport, * as name"),// Wrong for now
+            named: Vec::new(),
+            line: 9,
+        }, 
         Import {
             source: String::from("module-name"),
             default: String::from(""),
             named: Vec::new(),
-        }, // skipped
-        Import {
-            source: String::from("module-name"),
-            default: String::from(""),
-            named: Vec::new(),
-        }, // skipped
-        Import {
-            source: String::from("module-name"),
-            default: String::from(""),
-            named: Vec::new(),
-        }, // skipped
-        Import {
-            source: String::from("module-name"),
-            default: String::from("defaultExport, * as name"),
-            named: Vec::new(),
-        }, // Wrong for now
-        Import {
-            source: String::from("module-name"),
-            default: String::from(""),
-            named: Vec::new(),
+            line: 10,
         },
     ];
     for (i, line) in reader.lines().enumerate() {
         let l = &line?;
         if !l.starts_with("//") && !l.is_empty() {
-            let import = lang.parse_import(l, Path::new("/"));
+            let import = lang.parse_import(l, Path::new("/"),i);
             let expect = &expected[i];
             assert_eq!(import.source, expect.source);
             assert_eq!(import.named, expect.named);

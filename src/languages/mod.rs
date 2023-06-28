@@ -14,11 +14,13 @@ pub struct Import {
     pub source: String,
     pub named: Vec<String>,
     pub default: String,
+    pub line: usize,
 }
 
 #[derive(Clone, Debug)]
 pub struct Export {
     pub file_path: String,
+    pub line: usize,
     pub named: Vec<String>,
     pub default: String,
     pub source: String,

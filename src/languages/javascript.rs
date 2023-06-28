@@ -49,7 +49,7 @@ impl JavaScript {
         }
         return false;
     }
-    pub fn parse_import(&self, line: &String, current_path: &Path) -> languages::Import {
+    pub fn parse_import(&self, line: &String, current_path: &Path, line_count: usize) -> languages::Import {
         if !IMPORT_REGEX.is_match(&line) {
             panic!("Not an import statement");
         }
@@ -103,6 +103,7 @@ impl JavaScript {
                     .to_string(),
                 named,
                 default: default_import.to_string(),
+                line: line_count,
             };
         }
         // Either an alias, absolute path or node_module
@@ -110,9 +111,10 @@ impl JavaScript {
             source: source.to_string(),
             named,
             default: default_import.to_string(),
+            line: line_count,
         };
     }
-    pub fn parse_export(&self, line: &String, current_path: &Path) -> languages::Export {
+    pub fn parse_export(&self, line: &String, current_path: &Path, line_count: usize) -> languages::Export {
         let captures: regex::Captures<'_> = EXPORT_REGEX.captures(&line).unwrap();
         let default_export = "";
         let named_exports = captures.get(1).map_or("", |m| m.as_str());
@@ -121,6 +123,7 @@ impl JavaScript {
             named: named_exports.split(',').map(str::to_string).collect(),
             default: default_export.to_string(),
             source: String::from(""),
+            line: line_count,
         };
     }
 }
@@ -136,13 +139,13 @@ impl Language for JavaScript {
         for l in reader.lines() {
             if let Ok(cur_line) = l {
                 if self.is_import(&cur_line) {
-                    imports.push(self.parse_import(&cur_line, &path))
+                    imports.push(self.parse_import(&cur_line, &path, line_count))
                 }
                 if VARIABLE_REGEX.is_match(&cur_line) {
                     variable_count += 1;
                 }
                 if self.is_export(&cur_line) {
-                    exports.push(self.parse_export(&cur_line, &path))
+                    exports.push(self.parse_export(&cur_line, &path, line_count))
                 }
             }
             line_count += 1;
