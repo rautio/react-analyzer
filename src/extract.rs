@@ -147,6 +147,12 @@ pub struct FileExports {
     exports: Vec<Export>,
 }
 
+#[derive(Debug)]
+struct Target {
+    id: usize,
+    name: String,
+}
+
 pub fn extract_exports(files: &Vec<ParsedFile>, import_graph: &ImportGraph) -> Vec<FileExports> {
     let mut file_exports: Vec<FileExports> = Vec::new();
     let mut node_map: HashMap<String, &Node> = HashMap::new();
@@ -155,12 +161,21 @@ pub fn extract_exports(files: &Vec<ParsedFile>, import_graph: &ImportGraph) -> V
         node_map.insert(node.path.clone(), node);
         node_id_map.insert(node.id, node);
     }
-    let mut edge_map: HashMap<usize, Vec<usize>> = HashMap::new();
+    let mut edge_map: HashMap<usize, Vec<Target>> = HashMap::new();
     for edge in &import_graph.edges {
         if edge_map.contains_key(&edge.source) {
-            edge_map.get_mut(&edge.source);
+            edge_map.get_mut(&edge.source).unwrap().push(Target {
+                id: edge.target,
+                name: edge.name.clone(),
+            });
         } else {
-            edge_map.insert(edge.source, vec![edge.target]);
+            edge_map.insert(
+                edge.source,
+                vec![Target {
+                    id: edge.target,
+                    name: edge.name.clone(),
+                }],
+            );
         }
     }
     for file in files {
@@ -170,8 +185,8 @@ pub fn extract_exports(files: &Vec<ParsedFile>, import_graph: &ImportGraph) -> V
             let targets = edge_map.get(&node_map.get(&file.path).unwrap().id).unwrap();
             for target in targets {
                 let e = Export {
-                    name: String::from(""),
-                    target: node_id_map.get(target).unwrap().path.clone(),
+                    name: target.name.to_string(),
+                    target: node_id_map.get(&target.id).unwrap().path.clone(),
                 };
                 exports.push(e);
             }
