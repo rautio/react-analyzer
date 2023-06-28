@@ -159,7 +159,7 @@ pub fn extract_exports(files: &Vec<ParsedFile>, import_graph: &ImportGraph) -> V
     }
     for file in files {
         let mut exports = Vec::new();
-        if edge_map.contains_key(&node_map.get(&file.path).unwrap().id){
+        if edge_map.contains_key(&node_map.get(&file.path).unwrap().id) {
             // Not all files have exports
             let targets = edge_map.get(&node_map.get(&file.path).unwrap().id).unwrap();
             for target in targets {
