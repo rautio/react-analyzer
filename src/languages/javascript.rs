@@ -21,7 +21,7 @@ lazy_static! {
     static ref TEST_REGEX: Regex = Regex::new(r#"(test|it)\(('|").*('|"),"#,).unwrap();
     static ref SKIPPED_REGEX: Regex = Regex::new(r#"(test.skip|it.skip)\(('|").*('|"),"#,).unwrap();
     static ref VARIABLE_REGEX: Regex = Regex::new(r"^\s?(let|var|const)\s?(.*) =").unwrap();
-    static ref EXPORT_REGEX: Regex = Regex::new(r"^export (.*)").unwrap();
+    static ref EXPORT_REGEX: Regex = Regex::new(r"^export (.+)").unwrap();
 }
 
 pub struct JavaScript {}
@@ -232,6 +232,20 @@ mod tests {
         ];
         for val in false_values {
             assert_eq!(lang.is_import(&String::from(val)), false);
+        }
+    }
+    #[test]
+    fn test_is_export() {
+        let lang = JavaScript {};
+        let true_values = [
+            "export default Foo",
+            "export const Foo = 'bar';",
+            "export const Foo = () => {",
+            "export Foo",
+            "export { Foo, Bar as Bar2 }",
+        ];
+        for val in true_values {
+            assert_eq!(lang.is_export(&String::from(val)), true);
         }
     }
 }
