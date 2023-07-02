@@ -5,6 +5,7 @@ use regex::Regex;
 use rome_js_parser;
 use rome_js_syntax;
 use rome_js_syntax::JsSyntaxKind;
+use rome_rowan::AstNode;
 use std::fs;
 use std::fs::File;
 use std::io::BufRead;
@@ -34,57 +35,62 @@ impl JavaScript {
         let mut exports: Vec<Export> = Vec::new();
         let file_string = fs::read_to_string(&path).expect("Unable to read file");
         let parsed = rome_js_parser::parse_module(&file_string);
-        for node in parsed.syntax().descendants() {
-            match node.kind() {
-                JsSyntaxKind::JS_IMPORT => {
-                    // Import statement                let mut source = String::from("");
-                    let mut is_default = false;
-                    let mut named: Vec<String> = Vec::new();
-                    let mut source = String::from("");
-                    for im in node.descendants() {
-                        match im.kind() {
-                            JsSyntaxKind::JS_MODULE_SOURCE => {
-                                source = im.to_string();
-                            }
-                            JsSyntaxKind::JS_IMPORT_DEFAULT_CLAUSE => {
-                                is_default = true;
-                            }
-                            JsSyntaxKind::JS_NAMED_IMPORT_SPECIFIER_LIST => {
-                                named = im
-                                    .to_string()
-                                    .split(',')
-                                    .map(str::trim)
-                                    .map(str::to_string)
-                                    .collect();
-                            }
-                            _ => {}
-                        }
-                    }
+        for item in parsed.tree().items() {
+            if item.as_js_import().is_some() {
+                // Import
+                let import_clause = item.as_js_import().unwrap().import_clause().unwrap();
+                if import_clause.as_js_import_named_clause().is_some() {
+                    // Named import!
+                    let named_clause = import_clause.as_js_import_named_clause().unwrap();
+                    let named_imports = named_clause.as_fields().named_import.unwrap();
+                    let import_specifiers = named_imports
+                        .as_js_named_import_specifiers()
+                        .unwrap()
+                        .as_fields()
+                        .specifiers;
                     imports.push(Import {
-                        source: source,
-                        is_default,
-                        named,
+                        source: named_clause.as_fields().source.unwrap().to_string(),
+                        is_default: named_clause.as_fields().default_specifier.is_some(),
+                        named: import_specifiers
+                            .syntax()
+                            .to_string()
+                            .split(',')
+                            .map(str::trim)
+                            .map(str::to_string)
+                            .collect::<Vec<String>>(),
                         line: 0,
                     })
                 }
-                JsSyntaxKind::JS_EXPORT => {
-                    // Export statement
-                    for im in node.descendants() {
-                        let mut default = String::from("");
-                        let named = Vec::new();
-                        if im.kind() == JsSyntaxKind::JS_EXPORT_DEFAULT_EXPRESSION_CLAUSE {
-                            default = im.to_string();
-                        }
-                        exports.push(Export {
-                            file_path: path.display().to_string(),
-                            line: 0,
-                            named,
-                            default,
-                            source: String::from(""),
-                        })
-                    }
+                if import_clause.as_js_import_default_clause().is_some() {
+                    // Default import!
+                    let default = import_clause.as_js_import_default_clause().unwrap();
+                    imports.push(Import {
+                        source: default.as_fields().source.unwrap().to_string(),
+                        is_default: true,
+                        named: Vec::new(),
+                        line: 0,
+                    })
                 }
-                _ => {}
+            }
+            if item.as_js_export().is_some() {
+                // let mut mutation = item.as_js_export().unwrap().begin();
+                let export = item.as_js_export().unwrap();
+
+                // Export statement
+                for im in export.syntax().descendants() {
+                    let mut default = String::from("");
+                    let named = Vec::new();
+                    if im.kind() == JsSyntaxKind::JS_EXPORT_DEFAULT_EXPRESSION_CLAUSE {
+                        default = im.to_string();
+                    }
+                    exports.push(Export {
+                        file_path: path.display().to_string(),
+                        line: 0,
+                        named,
+                        default,
+                        source: String::from(""),
+                    })
+                }
             }
         }
         return (imports, exports);
