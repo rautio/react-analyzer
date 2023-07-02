@@ -64,19 +64,8 @@ impl JavaScript {
                                 .collect::<Vec<String>>(),
                             line: 0,
                         })
-                    } else {
-                        println!("no match?");
-                        println!(
-                            "1: {:?}",
-                            named_imports.as_js_namespace_import_specifier().unwrap()
-                        );
                     }
                 }
-                println!(
-                    "import namespace: {:?}",
-                    import_clause.as_js_import_namespace_clause()
-                );
-                println!("bare: {:?}", import_clause.as_js_import_bare_clause());
                 if import_clause.as_js_import_default_clause().is_some() {
                     // Default import!
                     let default = import_clause.as_js_import_default_clause().unwrap();
