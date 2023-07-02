@@ -36,7 +36,6 @@ impl JavaScript {
         return name.to_str().unwrap().to_string();
     }
     pub fn parse_module(&self, path: &Path) -> (Vec<Import>, Vec<Export>) {
-        println!("PARSING: {}", path.display());
         let mut imports: Vec<Import> = Vec::new();
         let mut exports: Vec<Export> = Vec::new();
         let file_string = fs::read_to_string(&path).expect("Unable to read file");
