@@ -13,7 +13,6 @@ use self::unknown::Unknown;
 pub struct Import {
     pub source: String,
     pub named: Vec<String>,
-    pub default: String,
     pub is_default: bool,
     pub line: usize,
 }

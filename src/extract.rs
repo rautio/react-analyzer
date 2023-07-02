@@ -123,7 +123,7 @@ pub fn extract_import_graph(files: &Vec<ParsedFile>) -> ImportGraph {
                     id: edge_count,
                     source: node_map.get(&src).unwrap().id,
                     target: node_map.get(file_path).unwrap().id,
-                    is_default: !import.default.is_empty(),
+                    is_default: import.is_default,
                     name: name.to_string(),
                 });
             }

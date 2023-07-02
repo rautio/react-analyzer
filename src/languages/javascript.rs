@@ -63,7 +63,6 @@ impl JavaScript {
                     imports.push(Import {
                         source: source,
                         is_default,
-                        default: String::from(""), // TODO: remove
                         named,
                         line: 0,
                     })
