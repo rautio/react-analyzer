@@ -1,11 +1,11 @@
 use super::Language;
-use crate::languages;
-use crate::languages::Export;
-use crate::languages::ParsedFile;
-use crate::languages::TestFile;
+use crate::languages::{Export, Import, ParsedFile, TestFile};
 use lazy_static::lazy_static;
-use path_absolutize::*;
 use regex::Regex;
+use rome_js_parser;
+use rome_js_syntax;
+use rome_js_syntax::JsSyntaxKind;
+use std::fs;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -35,106 +35,65 @@ impl JavaScript {
         }
         return name.to_str().unwrap().to_string();
     }
-    /// Is the given string an import statement.
-    pub fn is_import(&self, line: &String) -> bool {
-        if let Some(_) = IMPORT_REGEX.find(&line) {
-            return true;
-        }
-        return false;
-    }
-    /// Is the given string an export statement
-    pub fn is_export(&self, line: &String) -> bool {
-        if let Some(_) = EXPORT_REGEX.find(&line) {
-            return true;
-        }
-        return false;
-    }
-    pub fn parse_import(
-        &self,
-        line: &String,
-        current_path: &Path,
-        line_count: usize,
-    ) -> languages::Import {
-        if !IMPORT_REGEX.is_match(&line) {
-            panic!("Not an import statement");
-        }
-        let captures = IMPORT_REGEX.captures(&line).unwrap();
-        // Capture imported names
-        let raw_import_names = captures.get(1).map_or("", |m| m.as_str());
-        // Then import could not have any named imports like: "import 'style.css';"
-        let mut default_import = "";
-        let mut named_imports = "";
-        let name_captures_option = IMPORT_NAMES_REGEX.captures(raw_import_names);
-        if !name_captures_option.is_none() {
-            let name_captures = name_captures_option.unwrap();
-            // let name_captures = IMPORT_NAMES_REGEX.captures(raw_import_names).unwrap();
-            default_import = name_captures.get(1).map_or("", |m| m.as_str());
-            named_imports = name_captures.get(3).map_or("", |m| m.as_str());
-        }
-        // Capture import source path
-        let double_quote_import = captures.get(2).map_or("", |m| m.as_str());
-        let mut source = double_quote_import;
-        if source == "" {
-            let single_quote_import = captures.get(3).map_or("", |m| m.as_str());
-            source = single_quote_import;
-        }
-        if source == "." {
-            source = "";
-        }
-        let mut named = Vec::new();
-        if !named_imports.is_empty() {
-            named = named_imports
-                .split(',')
-                .map(str::trim)
-                .map(str::to_string)
-                .collect();
-        }
-        let source_path = Path::new(&source);
-        // Relative path, convert it to an absolute path
-        if source_path.to_str().unwrap().to_string().starts_with('.') {
-            return languages::Import {
-                source: current_path
-                    // current_path includes filename
-                    .parent()
-                    .unwrap()
-                    // join with relative import
-                    .join(source_path)
-                    .absolutize()
-                    .unwrap()
-                    .file_stem()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_string(),
+    pub fn parse_module(&self, path: &Path) -> (Vec<Import>, Vec<Export>) {
+        println!("PARSING: {}", path.display());
+        let mut imports: Vec<Import> = Vec::new();
+        let mut exports: Vec<Export> = Vec::new();
+        let file_string = fs::read_to_string(&path).expect("Unable to read file");
+        let parsed = rome_js_parser::parse_module(&file_string);
+        let parsed_imports = parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == JsSyntaxKind::JS_IMPORT);
+        let parsed_exports = parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == JsSyntaxKind::JS_EXPORT);
+        for import in parsed_imports {
+            let mut source = String::from("");
+            let mut is_default = false;
+            let mut named: Vec<String> = Vec::new();
+            for im in import.descendants() {
+                if im.kind() == JsSyntaxKind::JS_MODULE_SOURCE {
+                    source = im.to_string();
+                }
+                if im.kind() == JsSyntaxKind::JS_IMPORT_DEFAULT_CLAUSE {
+                    is_default = true;
+                }
+                if im.kind() == JsSyntaxKind::JS_NAMED_IMPORT_SPECIFIER_LIST {
+                    named = im
+                        .to_string()
+                        .split(',')
+                        .map(str::trim)
+                        .map(str::to_string)
+                        .collect();
+                }
+            }
+            imports.push(Import {
+                source: source,
+                is_default,
+                default: String::from(""), // TODO: remove
                 named,
-                default: default_import.to_string(),
-                line: line_count,
-            };
+                line: 0,
+            })
         }
-        // Either an alias, absolute path or node_module
-        return languages::Import {
-            source: source.to_string(),
-            named,
-            default: default_import.to_string(),
-            line: line_count,
-        };
-    }
-    pub fn parse_export(
-        &self,
-        line: &String,
-        current_path: &Path,
-        line_count: usize,
-    ) -> languages::Export {
-        let captures: regex::Captures<'_> = EXPORT_REGEX.captures(&line).unwrap();
-        let default_export = "";
-        let named_exports = captures.get(1).map_or("", |m| m.as_str());
-        return Export {
-            file_path: current_path.display().to_string(),
-            named: named_exports.split(',').map(str::to_string).collect(),
-            default: default_export.to_string(),
-            source: String::from(""),
-            line: line_count,
-        };
+        for export in parsed_exports {
+            for im in export.descendants() {
+                let mut default = String::from("");
+                let named = Vec::new();
+                if im.kind() == JsSyntaxKind::JS_EXPORT_DEFAULT_EXPRESSION_CLAUSE {
+                    default = im.to_string();
+                }
+                exports.push(Export {
+                    file_path: path.display().to_string(),
+                    line: 0,
+                    named,
+                    default,
+                    source: String::from(""),
+                })
+            }
+        }
+        return (imports, exports);
     }
 }
 
@@ -142,20 +101,13 @@ impl Language for JavaScript {
     fn parse_file(&self, path: &Path) -> Result<ParsedFile, Error> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
-        let mut imports = Vec::new();
-        let mut exports: Vec<Export> = Vec::new();
+        let (imports, exports) = self.parse_module(&path);
         let mut line_count = 0;
         let mut variable_count = 0;
         for l in reader.lines() {
             if let Ok(cur_line) = l {
-                if self.is_import(&cur_line) {
-                    imports.push(self.parse_import(&cur_line, &path, line_count))
-                }
                 if VARIABLE_REGEX.is_match(&cur_line) {
                     variable_count += 1;
-                }
-                if self.is_export(&cur_line) {
-                    exports.push(self.parse_export(&cur_line, &path, line_count))
                 }
             }
             line_count += 1;
@@ -196,56 +148,5 @@ impl Language for JavaScript {
             skipped_test_count,
         };
         return Ok(parsed);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_is_import() {
-        let lang = JavaScript {};
-        let true_values = [
-            "import videos from './videos/index.js'",
-            "import * from \"foo\"",
-            "import test, { bar } from \"foo\"",
-            "import rick from \"morty\"",
-            "import { rick, roll } from \"foo\";",
-            "import { rick, roll } from 'foo';",
-            "import * from 'foo';",
-            "import 'module-name'",
-            "import \"module-name\"",
-            "import {
-                something
-            } from \"./test/okbb\"",
-        ];
-        for val in true_values {
-            assert_eq!(lang.is_import(&String::from(val)), true);
-        }
-        let false_values = [
-            "import* from 'foo';",
-            "import * from \"foo';",
-            "const f = 2;",
-            "import \"module-name'",
-            "importing hya from 'ttt'",
-            "import fbsfrom ''",
-        ];
-        for val in false_values {
-            assert_eq!(lang.is_import(&String::from(val)), false);
-        }
-    }
-    #[test]
-    fn test_is_export() {
-        let lang = JavaScript {};
-        let true_values = [
-            "export default Foo",
-            "export const Foo = 'bar';",
-            "export const Foo = () => {",
-            "export Foo",
-            "export { Foo, Bar as Bar2 }",
-        ];
-        for val in true_values {
-            assert_eq!(lang.is_export(&String::from(val)), true);
-        }
     }
 }
