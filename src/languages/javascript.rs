@@ -30,7 +30,11 @@ impl JavaScript {
         }
         return name.to_str().unwrap().to_string();
     }
-    pub fn parse_module(&self, file_string: &String, file_path: String) -> (Vec<Import>, Vec<Export>) {
+    pub fn parse_module(
+        &self,
+        file_string: &String,
+        file_path: String,
+    ) -> (Vec<Import>, Vec<Export>) {
         let mut imports: Vec<Import> = Vec::new();
         let mut exports: Vec<Export> = Vec::new();
         let parsed = rome_js_parser::parse_module(file_string);
@@ -42,27 +46,49 @@ impl JavaScript {
                     // Named import!
                     let named_clause = import_clause.as_js_import_named_clause().unwrap();
                     let named_imports = named_clause.as_fields().named_import.unwrap();
-                    let import_specifiers = named_imports
-                        .as_js_named_import_specifiers()
-                        .unwrap()
-                        .as_fields()
-                        .specifiers;
-                    imports.push(Import {
-                        source: named_clause.as_fields().source.unwrap().to_string(),
-                        is_default: named_clause.as_fields().default_specifier.is_some(),
-                        named: import_specifiers
-                            .syntax()
-                            .to_string()
-                            .split(',')
-                            .map(str::trim)
-                            .map(str::to_string)
-                            .collect::<Vec<String>>(),
-                        line: 0,
-                    })
+                    if named_imports.as_js_named_import_specifiers().is_some() {
+                        let import_specifiers = named_imports
+                            .as_js_named_import_specifiers()
+                            .unwrap()
+                            .as_fields()
+                            .specifiers;
+                        imports.push(Import {
+                            source: named_clause.as_fields().source.unwrap().to_string(),
+                            is_default: named_clause.as_fields().default_specifier.is_some(),
+                            named: import_specifiers
+                                .syntax()
+                                .to_string()
+                                .split(',')
+                                .map(str::trim)
+                                .map(str::to_string)
+                                .collect::<Vec<String>>(),
+                            line: 0,
+                        })
+                    } else {
+                        println!("no match?");
+                        println!(
+                            "1: {:?}",
+                            named_imports.as_js_namespace_import_specifier().unwrap()
+                        );
+                    }
                 }
+                println!(
+                    "import namespace: {:?}",
+                    import_clause.as_js_import_namespace_clause()
+                );
+                println!("bare: {:?}", import_clause.as_js_import_bare_clause());
                 if import_clause.as_js_import_default_clause().is_some() {
                     // Default import!
                     let default = import_clause.as_js_import_default_clause().unwrap();
+                    imports.push(Import {
+                        source: default.as_fields().source.unwrap().to_string(),
+                        is_default: true,
+                        named: Vec::new(),
+                        line: 0,
+                    })
+                }
+                if import_clause.as_js_import_namespace_clause().is_some() {
+                    let default = import_clause.as_js_import_namespace_clause().unwrap();
                     imports.push(Import {
                         source: default.as_fields().source.unwrap().to_string(),
                         is_default: true,
