@@ -3,8 +3,6 @@ use crate::languages::{Export, Import, ParsedFile, TestFile};
 use lazy_static::lazy_static;
 use regex::Regex;
 use rome_js_parser;
-use rome_js_syntax;
-use rome_js_syntax::JsSyntaxKind;
 use rome_rowan::AstNode;
 use std::fs;
 use std::fs::File;
@@ -87,21 +85,86 @@ impl JavaScript {
                 }
             }
             if item.as_js_export().is_some() {
-                // let mut mutation = item.as_js_export().unwrap().begin();
                 let export = item.as_js_export().unwrap();
+                let export_clause = export.export_clause().unwrap();
 
-                // Export statement
-                for im in export.syntax().descendants() {
-                    let mut default = String::from("");
-                    let named = Vec::new();
-                    if im.kind() == JsSyntaxKind::JS_EXPORT_DEFAULT_EXPRESSION_CLAUSE {
-                        default = im.to_string();
-                    }
+                if export_clause.as_js_export_named_from_clause().is_some() {
+                    // Export named from
                     exports.push(Export {
                         file_path: file_path.clone(),
                         line: 0,
-                        named,
-                        default,
+                        named: export_clause
+                            .as_js_export_named_from_clause()
+                            .unwrap()
+                            .as_fields()
+                            .specifiers
+                            .syntax()
+                            .to_string()
+                            .split(',')
+                            .map(str::trim)
+                            .map(str::to_string)
+                            .collect::<Vec<String>>(),
+                        default: String::from(""),
+                        source: export_clause
+                            .as_js_export_named_from_clause()
+                            .unwrap()
+                            .as_fields()
+                            .source
+                            .unwrap()
+                            .to_string(),
+                    })
+                }
+                if export_clause.as_js_export_named_clause().is_some() {
+                    // Named exports
+                    exports.push(Export {
+                        file_path: file_path.clone(),
+                        line: 0,
+                        named: export_clause
+                            .as_js_export_named_clause()
+                            .unwrap()
+                            .as_fields()
+                            .specifiers
+                            .syntax()
+                            .to_string()
+                            .split(',')
+                            .map(str::trim)
+                            .map(str::to_string)
+                            .collect::<Vec<String>>(),
+                        default: String::from(""),
+                        source: String::from(""),
+                    })
+                }
+                if export_clause.as_js_export_from_clause().is_some() {
+                    // Export from
+                    exports.push(Export {
+                        file_path: file_path.clone(),
+                        line: 0,
+                        default: String::from(""),
+                        named: vec![],
+                        source: export_clause
+                            .as_js_export_from_clause()
+                            .unwrap()
+                            .as_fields()
+                            .source
+                            .unwrap()
+                            .to_string(),
+                    })
+                }
+                if export_clause
+                    .as_js_export_default_expression_clause()
+                    .is_some()
+                {
+                    exports.push(Export {
+                        file_path: file_path.clone(),
+                        line: 0,
+                        named: vec![],
+                        default: export_clause
+                            .as_js_export_default_expression_clause()
+                            .unwrap()
+                            .as_fields()
+                            .expression
+                            .unwrap()
+                            .to_string(),
                         source: String::from(""),
                     })
                 }

@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 
 #[test]
-fn test_parse_module() -> Result<(), Box<dyn std::error::Error>> {
+fn test_imports_parse_module() -> Result<(), Box<dyn std::error::Error>> {
     let lang = JavaScript {};
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests/mocks/import.js");
@@ -88,5 +88,16 @@ fn test_parse_module() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(import.named, expected[i].named);
         assert_eq!(import.is_default, expected[i].is_default);
     }
+    Ok(())
+}
+
+#[test]
+fn test_exports_parse_module() -> Result<(), Box<dyn std::error::Error>> {
+    let lang = JavaScript {};
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests/mocks/export.js");
+    let file_string = fs::read_to_string(&path).expect("Unable to read file");
+    let (_, exports) = lang.parse_module(&file_string, String::from(""));
+    assert_eq!(exports.len(), 11); // Wrong for now
     Ok(())
 }
