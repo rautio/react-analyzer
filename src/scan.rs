@@ -5,6 +5,7 @@ use crate::languages::TestFile;
 use regex::Regex;
 use std::fs::metadata;
 use std::path::Path;
+use std::time::Instant;
 
 fn find_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<String> {
     let mut files: Vec<String> = Vec::new();
@@ -32,6 +33,7 @@ fn find_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<
 }
 /// Scan a given path and return all files parsed
 pub fn scan(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<ParsedFile> {
+    let now = Instant::now();
     let files: Vec<String> = find_files(root_path, pattern, ignore_pattern);
     let mut parsed_files: Vec<ParsedFile> = Vec::new();
     for path in files {
@@ -41,6 +43,8 @@ pub fn scan(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Pa
             parsed_files.push(p);
         }
     }
+    let elapsed = now.elapsed();
+    println!("Scan done in: {:.2?}!", elapsed);
     return parsed_files;
 }
 

@@ -30,11 +30,10 @@ impl JavaScript {
         }
         return name.to_str().unwrap().to_string();
     }
-    pub fn parse_module(&self, path: &Path) -> (Vec<Import>, Vec<Export>) {
+    pub fn parse_module(&self, file_string: &String, file_path: String) -> (Vec<Import>, Vec<Export>) {
         let mut imports: Vec<Import> = Vec::new();
         let mut exports: Vec<Export> = Vec::new();
-        let file_string = fs::read_to_string(&path).expect("Unable to read file");
-        let parsed = rome_js_parser::parse_module(&file_string);
+        let parsed = rome_js_parser::parse_module(file_string);
         for item in parsed.tree().items() {
             if item.as_js_import().is_some() {
                 // Import
@@ -84,7 +83,7 @@ impl JavaScript {
                         default = im.to_string();
                     }
                     exports.push(Export {
-                        file_path: path.display().to_string(),
+                        file_path: file_path.clone(),
                         line: 0,
                         named,
                         default,
@@ -99,11 +98,10 @@ impl JavaScript {
 
 impl Language for JavaScript {
     fn parse_file(&self, path: &Path) -> Result<ParsedFile, Error> {
-        let file = File::open(path)?;
-        let reader = BufReader::new(file);
-        let (imports, exports) = self.parse_module(&path);
+        let file_string = fs::read_to_string(&path).expect("Unable to read file");
+        let (imports, exports) = self.parse_module(&file_string, path.display().to_string());
         let parsed = ParsedFile {
-            line_count: reader.lines().count(),
+            line_count: file_string.lines().count(),
             imports,
             exports,
             name: self.get_file_name(&path),
