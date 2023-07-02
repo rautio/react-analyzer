@@ -20,7 +20,6 @@ impl Language for Unknown {
             name: path.file_name().unwrap().to_str().unwrap().to_string(),
             extension: path.extension().unwrap().to_str().unwrap().to_string(),
             path: path.to_str().unwrap().to_string(),
-            variable_count: 0,
         };
         return Ok(parsed);
     }
