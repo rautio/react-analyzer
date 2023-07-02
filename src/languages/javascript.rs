@@ -37,7 +37,7 @@ impl JavaScript {
         for node in parsed.syntax().descendants() {
             match node.kind() {
                 JsSyntaxKind::JS_IMPORT => {
-                     // Import statement                let mut source = String::from("");
+                    // Import statement                let mut source = String::from("");
                     let mut is_default = false;
                     let mut named: Vec<String> = Vec::new();
                     let mut source = String::from("");
@@ -51,13 +51,13 @@ impl JavaScript {
                             }
                             JsSyntaxKind::JS_NAMED_IMPORT_SPECIFIER_LIST => {
                                 named = im
-                                .to_string()
-                                .split(',')
-                                .map(str::trim)
-                                .map(str::to_string)
-                                .collect();
+                                    .to_string()
+                                    .split(',')
+                                    .map(str::trim)
+                                    .map(str::to_string)
+                                    .collect();
                             }
-                            _ => {},
+                            _ => {}
                         }
                     }
                     imports.push(Import {
@@ -67,7 +67,7 @@ impl JavaScript {
                         named,
                         line: 0,
                     })
-                },
+                }
                 JsSyntaxKind::JS_EXPORT => {
                     // Export statement
                     for im in node.descendants() {
