@@ -20,6 +20,7 @@ lazy_static! {
 pub struct JavaScript {}
 
 impl JavaScript {
+    /// JS file name given a path. If a file name is Component/index.js the name becomes Component.
     pub fn get_file_name(&self, path: &Path) -> String {
         let mut name = path.file_stem().unwrap();
         // If its an index file we want to use the folder as the file name
@@ -33,56 +34,58 @@ impl JavaScript {
         let mut exports: Vec<Export> = Vec::new();
         let file_string = fs::read_to_string(&path).expect("Unable to read file");
         let parsed = rome_js_parser::parse_module(&file_string);
-        let parsed_imports = parsed
-            .syntax()
-            .descendants()
-            .filter(|node| node.kind() == JsSyntaxKind::JS_IMPORT);
-        let parsed_exports = parsed
-            .syntax()
-            .descendants()
-            .filter(|node| node.kind() == JsSyntaxKind::JS_EXPORT);
-        for import in parsed_imports {
-            let mut source = String::from("");
-            let mut is_default = false;
-            let mut named: Vec<String> = Vec::new();
-            for im in import.descendants() {
-                if im.kind() == JsSyntaxKind::JS_MODULE_SOURCE {
-                    source = im.to_string();
+        for node in parsed.syntax().descendants() {
+            match node.kind() {
+                JsSyntaxKind::JS_IMPORT => {
+                     // Import statement                let mut source = String::from("");
+                    let mut is_default = false;
+                    let mut named: Vec<String> = Vec::new();
+                    let mut source = String::from("");
+                    for im in node.descendants() {
+                        match im.kind() {
+                            JsSyntaxKind::JS_MODULE_SOURCE => {
+                                source = im.to_string();
+                            }
+                            JsSyntaxKind::JS_IMPORT_DEFAULT_CLAUSE => {
+                                is_default = true;
+                            }
+                            JsSyntaxKind::JS_NAMED_IMPORT_SPECIFIER_LIST => {
+                                named = im
+                                .to_string()
+                                .split(',')
+                                .map(str::trim)
+                                .map(str::to_string)
+                                .collect();
+                            }
+                            _ => {},
+                        }
+                    }
+                    imports.push(Import {
+                        source: source,
+                        is_default,
+                        default: String::from(""), // TODO: remove
+                        named,
+                        line: 0,
+                    })
+                },
+                JsSyntaxKind::JS_EXPORT => {
+                    // Export statement
+                    for im in node.descendants() {
+                        let mut default = String::from("");
+                        let named = Vec::new();
+                        if im.kind() == JsSyntaxKind::JS_EXPORT_DEFAULT_EXPRESSION_CLAUSE {
+                            default = im.to_string();
+                        }
+                        exports.push(Export {
+                            file_path: path.display().to_string(),
+                            line: 0,
+                            named,
+                            default,
+                            source: String::from(""),
+                        })
+                    }
                 }
-                if im.kind() == JsSyntaxKind::JS_IMPORT_DEFAULT_CLAUSE {
-                    is_default = true;
-                }
-                if im.kind() == JsSyntaxKind::JS_NAMED_IMPORT_SPECIFIER_LIST {
-                    named = im
-                        .to_string()
-                        .split(',')
-                        .map(str::trim)
-                        .map(str::to_string)
-                        .collect();
-                }
-            }
-            imports.push(Import {
-                source: source,
-                is_default,
-                default: String::from(""), // TODO: remove
-                named,
-                line: 0,
-            })
-        }
-        for export in parsed_exports {
-            for im in export.descendants() {
-                let mut default = String::from("");
-                let named = Vec::new();
-                if im.kind() == JsSyntaxKind::JS_EXPORT_DEFAULT_EXPRESSION_CLAUSE {
-                    default = im.to_string();
-                }
-                exports.push(Export {
-                    file_path: path.display().to_string(),
-                    line: 0,
-                    named,
-                    default,
-                    source: String::from(""),
-                })
+                _ => {}
             }
         }
         return (imports, exports);
