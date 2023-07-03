@@ -215,3 +215,27 @@ impl Language for JavaScript {
         return Ok(parsed);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_file_name() -> Result<(), String> {
+        let js = JavaScript {};
+        // Most file names
+        assert_eq!(
+            js.get_file_name(&Path::new("/MyTest/component.tsx")),
+            String::from("component")
+        );
+        assert_eq!(
+            js.get_file_name(&Path::new("/MyTest/test.spec.js")),
+            String::from("test.spec")
+        );
+        // index file names
+        assert_eq!(
+            js.get_file_name(&Path::new("/MyComponent/index.jsx")),
+            String::from("MyComponent")
+        );
+        Ok(())
+    }
+}
