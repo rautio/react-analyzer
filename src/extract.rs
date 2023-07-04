@@ -126,8 +126,8 @@ pub fn extract_import_graph(files: &Vec<ParsedFile>) -> ImportGraph {
                     is_default: import.is_default,
                     name: name.to_string(),
                 });
+                edge_count += 1;
             }
-            edge_count += 1;
         }
     }
     let nodes = node_map.values().cloned().collect();
@@ -138,6 +138,7 @@ pub fn extract_import_graph(files: &Vec<ParsedFile>) -> ImportGraph {
 pub struct Export {
     name: String,
     target: String,
+    is_default: bool,
 }
 
 #[derive(Serialize)]
@@ -150,9 +151,10 @@ pub struct FileExports {
 struct Target {
     id: usize,
     name: String,
+    is_default: bool,
 }
 
-pub fn extract_exports(files: &Vec<ParsedFile>, import_graph: &ImportGraph) -> Vec<FileExports> {
+pub fn extract_exports(import_graph: &ImportGraph) -> Vec<FileExports> {
     let mut file_exports: Vec<FileExports> = Vec::new();
     let mut node_map: HashMap<String, &Node> = HashMap::new();
     let mut node_id_map: HashMap<usize, &Node> = HashMap::new();
@@ -160,12 +162,15 @@ pub fn extract_exports(files: &Vec<ParsedFile>, import_graph: &ImportGraph) -> V
         node_map.insert(node.path.clone(), node);
         node_id_map.insert(node.id, node);
     }
+    // source_id -> [target_id1, target_id2]
+    // source_id is the file exporting. target ids are the files importing
     let mut edge_map: HashMap<usize, Vec<Target>> = HashMap::new();
     for edge in &import_graph.edges {
         if edge_map.contains_key(&edge.source) {
             edge_map.get_mut(&edge.source).unwrap().push(Target {
                 id: edge.target,
                 name: edge.name.clone(),
+                is_default: edge.is_default,
             });
         } else {
             edge_map.insert(
@@ -173,28 +178,27 @@ pub fn extract_exports(files: &Vec<ParsedFile>, import_graph: &ImportGraph) -> V
                 vec![Target {
                     id: edge.target,
                     name: edge.name.clone(),
+                    is_default: edge.is_default,
                 }],
             );
         }
     }
-    for file in files {
+    for source in edge_map.keys() {
+        let targets = edge_map.get(source).unwrap();
+        let source_file = node_id_map.get(source).unwrap();
         let mut exports = Vec::new();
-        if edge_map.contains_key(&node_map.get(&file.path).unwrap().id) {
-            // Not all files have exports
-            let targets = edge_map.get(&node_map.get(&file.path).unwrap().id).unwrap();
-            for target in targets {
-                let e = Export {
-                    name: target.name.to_string(),
-                    target: node_id_map.get(&target.id).unwrap().path.clone(),
-                };
-                exports.push(e);
-            }
+        for target in targets {
+            exports.push(Export {
+                name: target.name.clone(),
+                target: node_id_map.get(&target.id).unwrap().path.clone(),
+                is_default: target.is_default,
+            })
+
         }
-        let export_file = FileExports {
-            source: file.path.clone(),
+        file_exports.push(FileExports {
+            source: source_file.path.clone(),
             exports,
-        };
-        file_exports.push(export_file)
+        })
     }
     return file_exports;
 }
@@ -205,7 +209,7 @@ pub fn extract(files: Vec<ParsedFile>) -> (Summary, Output) {
     let mut import_count: usize = 0;
     let import_graph = extract_import_graph(&files);
     let dead_files = extract_dead_files(&import_graph);
-    let exports = extract_exports(&files, &import_graph);
+    let exports = extract_exports(&import_graph);
     for file in files {
         line_count += file.line_count;
         import_count += file.imports.len();
