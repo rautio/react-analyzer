@@ -4,6 +4,8 @@ use crate::languages::ParsedFile;
 use crate::languages::TestFile;
 use regex::Regex;
 use std::fs::metadata;
+use std::thread;
+use std::sync::mpsc::channel;
 use std::path::Path;
 use std::time::Instant;
 
@@ -36,12 +38,21 @@ pub fn scan(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Pa
     let now = Instant::now();
     let files: Vec<String> = find_files(root_path, pattern, ignore_pattern);
     let mut parsed_files: Vec<ParsedFile> = Vec::new();
-    for path in files {
-        let file_path = Path::new(&path);
-        let parsed = parse_file(&file_path);
-        if let Ok(p) = parsed {
-            parsed_files.push(p);
-        }
+    let (tx, rx) = channel();
+    let threads: Vec<_> = files.into_iter().map(|path|  {
+        let tx = tx.clone();
+        thread::spawn(move || {
+            let file_path = Path::new(&path);
+            let parsed = parse_file(&file_path);
+            if let Ok(p) = parsed {
+                tx.send(p).unwrap();
+            }
+        })
+    }).collect();
+    for handle in threads {
+        handle.join().unwrap();
+        let p = rx.recv().unwrap();
+        parsed_files.push(p);
     }
     let elapsed = now.elapsed();
     println!("Scan done in: {:.2?}!", elapsed);
