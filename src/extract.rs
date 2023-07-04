@@ -156,24 +156,23 @@ struct Target {
 
 pub fn extract_exports(import_graph: &ImportGraph) -> Vec<FileExports> {
     let mut file_exports: Vec<FileExports> = Vec::new();
-    let mut node_map: HashMap<String, &Node> = HashMap::new();
+    // Local mapping for easier lookup
     let mut node_id_map: HashMap<usize, &Node> = HashMap::new();
     for node in &import_graph.nodes {
-        node_map.insert(node.path.clone(), node);
         node_id_map.insert(node.id, node);
     }
-    // source_id -> [target_id1, target_id2]
+    // Maps: source_id -> [target_id1, target_id2]
     // source_id is the file exporting. target ids are the files importing
-    let mut edge_map: HashMap<usize, Vec<Target>> = HashMap::new();
+    let mut export_map: HashMap<usize, Vec<Target>> = HashMap::new();
     for edge in &import_graph.edges {
-        if edge_map.contains_key(&edge.source) {
-            edge_map.get_mut(&edge.source).unwrap().push(Target {
+        if export_map.contains_key(&edge.source) {
+            export_map.get_mut(&edge.source).unwrap().push(Target {
                 id: edge.target,
                 name: edge.name.clone(),
                 is_default: edge.is_default,
             });
         } else {
-            edge_map.insert(
+            export_map.insert(
                 edge.source,
                 vec![Target {
                     id: edge.target,
@@ -183,8 +182,9 @@ pub fn extract_exports(import_graph: &ImportGraph) -> Vec<FileExports> {
             );
         }
     }
-    for source in edge_map.keys() {
-        let targets = edge_map.get(source).unwrap();
+    // Iterate and parse all known exports
+    for source in export_map.keys() {
+        let targets = export_map.get(source).unwrap();
         let source_file = node_id_map.get(source).unwrap();
         let mut exports = Vec::new();
         for target in targets {
