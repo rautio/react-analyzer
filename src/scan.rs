@@ -4,9 +4,9 @@ use crate::languages::ParsedFile;
 use crate::languages::TestFile;
 use regex::Regex;
 use std::fs::metadata;
-use std::thread;
-use std::sync::mpsc::channel;
 use std::path::Path;
+use std::sync::mpsc::channel;
+use std::thread;
 use std::time::Instant;
 
 fn find_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<String> {
@@ -39,16 +39,19 @@ pub fn scan(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Pa
     let files: Vec<String> = find_files(root_path, pattern, ignore_pattern);
     let mut parsed_files: Vec<ParsedFile> = Vec::new();
     let (tx, rx) = channel();
-    let threads: Vec<_> = files.into_iter().map(|path|  {
-        let tx = tx.clone();
-        thread::spawn(move || {
-            let file_path = Path::new(&path);
-            let parsed = parse_file(&file_path);
-            if let Ok(p) = parsed {
-                tx.send(p).unwrap();
-            }
+    let threads: Vec<_> = files
+        .into_iter()
+        .map(|path| {
+            let tx = tx.clone();
+            thread::spawn(move || {
+                let file_path = Path::new(&path);
+                let parsed = parse_file(&file_path);
+                if let Ok(p) = parsed {
+                    tx.send(p).unwrap();
+                }
+            })
         })
-    }).collect();
+        .collect();
     for handle in threads {
         handle.join().unwrap();
         let p = rx.recv().unwrap();

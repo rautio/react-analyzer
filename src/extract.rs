@@ -193,7 +193,6 @@ pub fn extract_exports(import_graph: &ImportGraph) -> Vec<FileExports> {
                 target: node_id_map.get(&target.id).unwrap().path.clone(),
                 is_default: target.is_default,
             })
-
         }
         file_exports.push(FileExports {
             source: source_file.path.clone(),
