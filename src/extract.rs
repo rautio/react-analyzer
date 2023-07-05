@@ -3,6 +3,7 @@ use super::languages::TestFile;
 use serde::Serialize;
 use std::collections::HashMap;
 
+#[derive(Serialize)]
 pub struct Summary {
     pub line_count: usize,
     pub import_count: usize,
@@ -21,9 +22,10 @@ impl std::fmt::Display for Summary {
 
 #[derive(Serialize)]
 pub struct Output {
-    import_graph: ImportGraph,
-    dead_files: Vec<String>,
-    exports: Vec<FileExports>,
+    pub import_graph: ImportGraph,
+    pub dead_files: Vec<String>,
+    pub exports: Vec<FileExports>,
+    pub summary: Summary,
 }
 
 #[derive(Serialize)]
@@ -202,7 +204,7 @@ pub fn extract_exports(import_graph: &ImportGraph) -> Vec<FileExports> {
     return file_exports;
 }
 
-pub fn extract(files: Vec<ParsedFile>) -> (Summary, Output) {
+pub fn extract(files: Vec<ParsedFile>) -> Output {
     let file_count = files.len();
     let mut line_count = 0;
     let mut import_count: usize = 0;
@@ -213,19 +215,18 @@ pub fn extract(files: Vec<ParsedFile>) -> (Summary, Output) {
         line_count += file.line_count;
         import_count += file.imports.len();
     }
-    return (
-        Summary {
-            line_count,
-            import_count,
-            file_count,
-            unused_file_count: dead_files.len(),
-        },
-        Output {
-            import_graph,
-            dead_files,
-            exports,
-        },
-    );
+    let summary = Summary {
+        line_count,
+        import_count,
+        file_count,
+        unused_file_count: dead_files.len(),
+    };
+    return Output {
+        import_graph,
+        dead_files,
+        exports,
+        summary,
+    };
 }
 
 #[derive(Serialize)]

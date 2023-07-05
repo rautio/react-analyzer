@@ -36,9 +36,9 @@ fn main() {
         );
         // Scan Files
         let files: Vec<languages::ParsedFile> = scan::scan(root, &pattern, &ignore_pattern);
-        let (summary, output) = extract::extract(files);
-        let _ = output::write_output(output);
-        println!("=== File Summary ===\n{}\n", summary);
+        let output = extract::extract(files);
+        let _ = output::write_output(&output);
+        println!("=== File Summary ===\n{}\n", output.summary);
         // Scan Test Files
         let test_files: Vec<languages::TestFile> =
             scan::scan_test_files(root, &test_pattern, &ignore_pattern);
