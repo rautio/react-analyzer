@@ -4,7 +4,7 @@ use crate::languages::ParsedFile;
 use crate::languages::TestFile;
 use regex::Regex;
 use std::fs::metadata;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
 use std::time::Instant;
 use threadpool::ThreadPool;
@@ -47,9 +47,10 @@ pub fn scan(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Pa
         .into_iter()
         .map(|path| {
             let tx = tx.clone();
+            let prefix = PathBuf::from(root_path);
             pool.execute(move || {
                 let file_path = Path::new(&path);
-                let parsed = parse_file(&file_path);
+                let parsed = parse_file(&file_path, prefix);
                 if let Ok(p) = parsed {
                     tx.send(p).unwrap();
                 }

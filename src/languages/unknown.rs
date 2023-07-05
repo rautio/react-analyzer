@@ -5,12 +5,12 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub struct Unknown {}
 
 impl Language for Unknown {
-    fn parse_file(&self, path: &Path) -> Result<ParsedFile, Error> {
+    fn parse_file(&self, path: &Path, prefix: PathBuf) -> Result<ParsedFile, Error> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         let parsed = ParsedFile {

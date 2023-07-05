@@ -2,6 +2,7 @@ use super::languages::ParsedFile;
 use super::languages::TestFile;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::path::{Component, Path, PathBuf};
 
 #[derive(Serialize)]
 pub struct Summary {
@@ -50,6 +51,33 @@ pub struct Node {
     file_name: Option<String>,
     extension: Option<String>,
     line_count: Option<usize>,
+}
+
+pub fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = path.components().peekable();
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+        components.next();
+        PathBuf::from(c.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+
+    for component in components {
+        match component {
+            Component::Prefix(..) => unreachable!(),
+            Component::RootDir => {
+                ret.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                ret.pop();
+            }
+            Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+    ret
 }
 
 pub fn extract_dead_files(graph: &ImportGraph) -> Vec<String> {
@@ -104,6 +132,15 @@ pub fn extract_import_graph(files: &Vec<ParsedFile>) -> ImportGraph {
         // Create source file nodes and edges
         for import in &file.imports {
             let mut src = import.source.clone();
+            // Could be: NPM module, alias or genuinely a relative import.
+            if src.starts_with(".") {
+                let mut file_path = PathBuf::from(&import.file_path);
+                // Get to the directory
+                file_path.pop();
+                let source_path = Path::new(&file_path).join(Path::new(&src));
+                // Normalize to a real path
+                src = normalize_path(&source_path).display().to_string();
+            }
             if src.ends_with('/') {
                 src.pop();
             }

@@ -9,7 +9,7 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 lazy_static! {
     static ref TEST_REGEX: Regex = Regex::new(r#"(test|it)\(('|").*('|"),"#,).unwrap();
@@ -31,7 +31,7 @@ impl JavaScript {
     pub fn parse_module(
         &self,
         file_string: &String,
-        file_path: String,
+        file_path: &String,
     ) -> (Vec<Import>, Vec<Export>) {
         let mut imports: Vec<Import> = Vec::new();
         let mut exports: Vec<Export> = Vec::new();
@@ -51,7 +51,13 @@ impl JavaScript {
                             .as_fields()
                             .specifiers;
                         imports.push(Import {
-                            source: named_clause.as_fields().source.unwrap().to_string(),
+                            file_path: file_path.clone(),
+                            source: named_clause
+                                .as_fields()
+                                .source
+                                .unwrap()
+                                .text()
+                                .replace(&['\'', '"'][..], ""),
                             is_default: named_clause.as_fields().default_specifier.is_some(),
                             named: import_specifiers
                                 .syntax()
@@ -68,7 +74,13 @@ impl JavaScript {
                     // Default import!
                     let default = import_clause.as_js_import_default_clause().unwrap();
                     imports.push(Import {
-                        source: default.as_fields().source.unwrap().to_string(),
+                        file_path: file_path.clone(),
+                        source: default
+                            .as_fields()
+                            .source
+                            .unwrap()
+                            .text()
+                            .replace(&['\'', '"'][..], ""),
                         is_default: true,
                         named: Vec::new(),
                         line: 0,
@@ -77,7 +89,13 @@ impl JavaScript {
                 if import_clause.as_js_import_namespace_clause().is_some() {
                     let default = import_clause.as_js_import_namespace_clause().unwrap();
                     imports.push(Import {
-                        source: default.as_fields().source.unwrap().to_string(),
+                        file_path: file_path.clone(),
+                        source: default
+                            .as_fields()
+                            .source
+                            .unwrap()
+                            .text()
+                            .replace(&['\'', '"'][..], ""),
                         is_default: true,
                         named: Vec::new(),
                         line: 0,
@@ -175,16 +193,21 @@ impl JavaScript {
 }
 
 impl Language for JavaScript {
-    fn parse_file(&self, path: &Path) -> Result<ParsedFile, Error> {
+    fn parse_file(&self, path: &Path, root_prefix: PathBuf) -> Result<ParsedFile, Error> {
         let file_string = fs::read_to_string(&path).expect("Unable to read file");
-        let (imports, exports) = self.parse_module(&file_string, path.display().to_string());
+        let file_path = path
+            .strip_prefix(root_prefix)
+            .unwrap()
+            .display()
+            .to_string();
+        let (imports, exports) = self.parse_module(&file_string, &file_path);
         let parsed = ParsedFile {
             line_count: file_string.lines().count(),
             imports,
             exports,
             name: self.get_file_name(&path),
             extension: path.extension().unwrap().to_str().unwrap().to_string(),
-            path: path.to_str().unwrap().to_string(),
+            path: file_path,
         };
         return Ok(parsed);
     }
