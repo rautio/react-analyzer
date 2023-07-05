@@ -6,8 +6,8 @@ use regex::Regex;
 use std::fs::metadata;
 use std::path::Path;
 use std::sync::mpsc::channel;
-use std::thread;
 use std::time::Instant;
+use threadpool::ThreadPool;
 
 fn find_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<String> {
     let mut files: Vec<String> = Vec::new();
@@ -38,12 +38,16 @@ pub fn scan(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Pa
     let now = Instant::now();
     let files: Vec<String> = find_files(root_path, pattern, ignore_pattern);
     let mut parsed_files: Vec<ParsedFile> = Vec::new();
+    // We need to configure a fixed number of workers so we don't hit OS limits. On Mac the
+    // max number of open files is 256 and this can easily be hit if running in a large repo.
+    let n_workers = 64; // The performance bottleneck becomes file I/O and not number of threads after a certain point
+    let pool = ThreadPool::new(n_workers);
     let (tx, rx) = channel();
     let threads: Vec<_> = files
         .into_iter()
         .map(|path| {
             let tx = tx.clone();
-            thread::spawn(move || {
+            pool.execute(move || {
                 let file_path = Path::new(&path);
                 let parsed = parse_file(&file_path);
                 if let Ok(p) = parsed {
@@ -52,8 +56,7 @@ pub fn scan(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Pa
             })
         })
         .collect();
-    for handle in threads {
-        handle.join().unwrap();
+    for _ in threads {
         let p = rx.recv().unwrap();
         parsed_files.push(p);
     }
