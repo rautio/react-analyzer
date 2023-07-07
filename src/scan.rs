@@ -3,6 +3,8 @@ use crate::languages::parse_test_file;
 use crate::languages::ParsedFile;
 use crate::languages::TestFile;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::fs::metadata;
 use std::path::{Path, PathBuf};
@@ -14,6 +16,14 @@ struct Files {
     all_files: Vec<String>,
     package_json: Vec<PathBuf>,
     ts_config: Vec<PathBuf>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct PackageJson {
+    pub dependencies: Option<HashMap<String, String>>,
+    pub dev_dependencies: Option<HashMap<String, String>>,
+    pub peer_dependencies: Option<HashMap<String, String>>,
 }
 
 fn find_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Files {
@@ -60,6 +70,7 @@ pub fn scan(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Pa
     let now = Instant::now();
     let f = find_files(root_path, pattern, ignore_pattern);
     let mut parsed_files: Vec<ParsedFile> = Vec::new();
+    let mut parsed_package_json: Vec<PackageJson> = Vec::new();
     // We need to configure a fixed number of workers so we don't hit OS limits. On Mac the
     // max number of open files is 256 and this can easily be hit if running in a large repo.
     let n_workers = 64; // The performance bottleneck becomes file I/O and not number of threads after a certain point
@@ -70,10 +81,11 @@ pub fn scan(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Pa
             "Unable to read file: {}",
             &p_json.display().to_string()
         ));
-        let _: serde_json::Value = serde_json::from_str(file_string.as_str()).expect(&format!(
+        let p_json: PackageJson = serde_json::from_str(file_string.as_str()).expect(&format!(
             "JSON was not well-formatted in: {}",
             &p_json.display().to_string()
         ));
+        parsed_package_json.push(p_json)
     }
     for t_json in f.ts_config {
         let file_string = fs::read_to_string(&t_json).expect(&format!(
