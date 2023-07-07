@@ -194,7 +194,10 @@ impl JavaScript {
 
 impl Language for JavaScript {
     fn parse_file(&self, path: &Path, root_prefix: PathBuf) -> Result<ParsedFile, Error> {
-        let file_string = fs::read_to_string(&path).expect("Unable to read file");
+        let file_string = fs::read_to_string(&path).expect(&format!(
+            "Unable to read file: {}",
+            &path.display().to_string()
+        ));
         let file_path = path
             .strip_prefix(root_prefix)
             .unwrap()

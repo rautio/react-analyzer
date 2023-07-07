@@ -3,6 +3,7 @@ use crate::languages::parse_test_file;
 use crate::languages::ParsedFile;
 use crate::languages::TestFile;
 use regex::Regex;
+use std::fs;
 use std::fs::metadata;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
@@ -11,23 +12,23 @@ use threadpool::ThreadPool;
 
 struct Files {
     all_files: Vec<String>,
-    package_json: Vec<String>,
-    ts_config: Vec<String>,
+    package_json: Vec<PathBuf>,
+    ts_config: Vec<PathBuf>,
 }
 
 fn find_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Files {
     let mut all_files: Vec<String> = Vec::new();
-    let mut package_json: Vec<String> = Vec::new();
-    let mut ts_config: Vec<String> = Vec::new();
+    let mut package_json: Vec<PathBuf> = Vec::new();
+    let mut ts_config: Vec<PathBuf> = Vec::new();
     // Read path and validate
     for entry in root_path.read_dir().expect("Unable to read directory.") {
         if let Ok(entry) = entry {
             let file_path = &entry.path();
             if file_path.file_name().unwrap() == "package.json" {
-                package_json.push(file_path.display().to_string());
+                package_json.push(file_path.to_path_buf());
             }
-            if file_path.file_name().unwrap() == "ts.config.json" {
-                ts_config.push(file_path.display().to_string());
+            if file_path.file_name().unwrap() == "tsconfig.json" {
+                ts_config.push(file_path.to_path_buf());
             }
             let md = metadata(file_path).unwrap();
             // If matches ignore, skip
@@ -64,6 +65,26 @@ pub fn scan(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Pa
     let n_workers = 64; // The performance bottleneck becomes file I/O and not number of threads after a certain point
     let pool = ThreadPool::new(n_workers);
     let (tx, rx) = channel();
+    for p_json in f.package_json {
+        let file_string = fs::read_to_string(&p_json).expect(&format!(
+            "Unable to read file: {}",
+            &p_json.display().to_string()
+        ));
+        let _: serde_json::Value = serde_json::from_str(file_string.as_str()).expect(&format!(
+            "JSON was not well-formatted in: {}",
+            &p_json.display().to_string()
+        ));
+    }
+    for t_json in f.ts_config {
+        let file_string = fs::read_to_string(&t_json).expect(&format!(
+            "Unable to read file: {}",
+            &t_json.display().to_string()
+        ));
+        let _: serde_json::Value = serde_json::from_str(file_string.as_str()).expect(&format!(
+            "JSON was not well-formatted in: {}",
+            &t_json.display().to_string()
+        ));
+    }
     let threads: Vec<_> = f
         .all_files
         .into_iter()
