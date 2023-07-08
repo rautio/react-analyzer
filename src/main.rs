@@ -5,6 +5,7 @@ use std::time::Instant;
 mod extract;
 mod languages;
 mod output;
+mod package_json;
 mod print;
 mod scan;
 
@@ -35,8 +36,8 @@ fn main() {
             test_pattern.clone(),
         );
         // Scan Files
-        let files: Vec<languages::ParsedFile> = scan::scan(root, &pattern, &ignore_pattern);
-        let output = extract::extract(files);
+        let (files, package_jsons) = scan::scan(root, &pattern, &ignore_pattern);
+        let output = extract::extract(files, package_jsons);
         let _ = output::write_output(&output);
         println!("=== File Summary ===\n{}\n", output.summary);
         // Scan Test Files

@@ -2,9 +2,9 @@ use crate::languages::parse_file;
 use crate::languages::parse_test_file;
 use crate::languages::ParsedFile;
 use crate::languages::TestFile;
+use crate::package_json;
+use crate::package_json::PackageJson;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::fs::metadata;
 use std::path::{Path, PathBuf};
@@ -16,14 +16,6 @@ struct Files {
     all_files: Vec<String>,
     package_json: Vec<PathBuf>,
     ts_config: Vec<PathBuf>,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
-struct PackageJson {
-    pub dependencies: Option<HashMap<String, String>>,
-    pub dev_dependencies: Option<HashMap<String, String>>,
-    pub peer_dependencies: Option<HashMap<String, String>>,
 }
 
 fn find_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Files {
@@ -66,27 +58,20 @@ fn find_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> File
     };
 }
 /// Scan a given path and return all files parsed
-pub fn scan(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<ParsedFile> {
+pub fn scan(
+    root_path: &Path,
+    pattern: &Regex,
+    ignore_pattern: &Regex,
+) -> (Vec<ParsedFile>, Vec<PackageJson>) {
     let now = Instant::now();
     let f = find_files(root_path, pattern, ignore_pattern);
     let mut parsed_files: Vec<ParsedFile> = Vec::new();
-    let mut parsed_package_json: Vec<PackageJson> = Vec::new();
+    let mut parsed_package_jsons: Vec<PackageJson> = package_json::parse(f.package_json);
     // We need to configure a fixed number of workers so we don't hit OS limits. On Mac the
     // max number of open files is 256 and this can easily be hit if running in a large repo.
     let n_workers = 64; // The performance bottleneck becomes file I/O and not number of threads after a certain point
     let pool = ThreadPool::new(n_workers);
     let (tx, rx) = channel();
-    for p_json in f.package_json {
-        let file_string = fs::read_to_string(&p_json).expect(&format!(
-            "Unable to read file: {}",
-            &p_json.display().to_string()
-        ));
-        let p_json: PackageJson = serde_json::from_str(file_string.as_str()).expect(&format!(
-            "JSON was not well-formatted in: {}",
-            &p_json.display().to_string()
-        ));
-        parsed_package_json.push(p_json)
-    }
     for t_json in f.ts_config {
         let file_string = fs::read_to_string(&t_json).expect(&format!(
             "Unable to read file: {}",
@@ -118,7 +103,7 @@ pub fn scan(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<Pa
     }
     let elapsed = now.elapsed();
     println!("Scan done in: {:.2?}!", elapsed);
-    return parsed_files;
+    return (parsed_files, parsed_package_jsons);
 }
 
 pub fn scan_test_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<TestFile> {

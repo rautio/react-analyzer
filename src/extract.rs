@@ -1,5 +1,6 @@
 use super::languages::ParsedFile;
 use super::languages::TestFile;
+use super::package_json::{list_dependencies, PackageJson};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
@@ -27,6 +28,7 @@ pub struct Output {
     pub dead_files: Vec<String>,
     pub exports: Vec<FileExports>,
     pub summary: Summary,
+    pub package_json: PackageJsonExtract,
 }
 
 #[derive(Serialize)]
@@ -134,6 +136,7 @@ pub fn extract_import_graph(files: &Vec<ParsedFile>) -> ImportGraph {
             let mut src = import.source.clone();
             // Could be: NPM module, alias or genuinely a relative import.
             if src.starts_with(".") {
+                // Genuine relative path
                 let mut file_path = PathBuf::from(&import.file_path);
                 // Get to the directory
                 file_path.pop();
@@ -241,13 +244,37 @@ pub fn extract_exports(import_graph: &ImportGraph) -> Vec<FileExports> {
     return file_exports;
 }
 
-pub fn extract(files: Vec<ParsedFile>) -> Output {
+#[derive(Serialize)]
+pub struct PackageJsonExtract {
+    dependencies: HashMap<String, usize>,
+}
+
+pub fn extract_package_json(
+    exports: &Vec<FileExports>,
+    package_jsons: Vec<PackageJson>,
+) -> PackageJsonExtract {
+    let mut dependencies: HashMap<String, usize> = HashMap::new();
+    for p_json in package_jsons {
+        for d in list_dependencies(p_json) {
+            dependencies.insert(d, 0);
+        }
+    }
+    for ex in exports {
+        if dependencies.contains_key(&ex.source) {
+            *dependencies.get_mut(&ex.source).unwrap() += ex.exports.len();
+        }
+    }
+    return PackageJsonExtract { dependencies };
+}
+
+pub fn extract(files: Vec<ParsedFile>, package_jsons: Vec<PackageJson>) -> Output {
     let file_count = files.len();
     let mut line_count = 0;
     let mut import_count: usize = 0;
     let import_graph = extract_import_graph(&files);
     let dead_files = extract_dead_files(&import_graph);
     let exports = extract_exports(&import_graph);
+    let package_json = extract_package_json(&exports, package_jsons);
     for file in files {
         line_count += file.line_count;
         import_count += file.imports.len();
@@ -263,6 +290,7 @@ pub fn extract(files: Vec<ParsedFile>) -> Output {
         dead_files,
         exports,
         summary,
+        package_json,
     };
 }
 
