@@ -66,7 +66,7 @@ pub fn scan(
     let now = Instant::now();
     let f = find_files(root_path, pattern, ignore_pattern);
     let mut parsed_files: Vec<ParsedFile> = Vec::new();
-    let mut parsed_package_jsons: Vec<PackageJson> = package_json::parse(f.package_json);
+    let parsed_package_jsons: Vec<PackageJson> = package_json::parse(f.package_json);
     // We need to configure a fixed number of workers so we don't hit OS limits. On Mac the
     // max number of open files is 256 and this can easily be hit if running in a large repo.
     let n_workers = 64; // The performance bottleneck becomes file I/O and not number of threads after a certain point
