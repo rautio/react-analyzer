@@ -67,7 +67,7 @@ impl JavaScript {
                                 .map(str::to_string)
                                 .collect::<Vec<String>>(),
                             line: 0,
-                        })
+                        });
                     }
                 }
                 if import_clause.as_js_import_default_clause().is_some() {
@@ -84,7 +84,7 @@ impl JavaScript {
                         is_default: true,
                         named: Vec::new(),
                         line: 0,
-                    })
+                    });
                 }
                 if import_clause.as_js_import_namespace_clause().is_some() {
                     let default = import_clause.as_js_import_namespace_clause().unwrap();
@@ -99,7 +99,7 @@ impl JavaScript {
                         is_default: true,
                         named: Vec::new(),
                         line: 0,
-                    })
+                    });
                 }
             }
             if item.as_js_export().is_some() {

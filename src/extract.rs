@@ -2,6 +2,7 @@ use super::languages::ParsedFile;
 use super::languages::TestFile;
 use super::package_json::{list_dependencies, PackageJson};
 use serde::Serialize;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 
@@ -33,28 +34,39 @@ pub struct Output {
 
 #[derive(Serialize)]
 pub struct ImportGraph {
-    nodes: Vec<Node>,
-    edges: Vec<Edge>,
+    pub nodes: Vec<Node>,
+    pub edges: Vec<Edge>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq, PartialOrd)]
 pub struct Edge {
-    id: usize,
-    source: usize,
-    target: usize,
-    is_default: bool,
-    name: String,
+    pub id: usize,
+    pub source: usize,
+    pub target: usize,
+    pub is_default: bool,
+    pub name: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
+impl Ord for Edge {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq, PartialOrd)]
 pub struct Node {
-    id: usize,
-    path: String,
-    file_name: Option<String>,
-    extension: Option<String>,
-    line_count: Option<usize>,
+    pub id: usize,
+    pub path: String,
+    pub file_name: Option<String>,
+    pub extension: Option<String>,
+    pub line_count: Option<usize>,
 }
 
+impl Ord for Node {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.id.cmp(&other.id)
+    }
+}
 pub fn normalize_path(path: &Path) -> PathBuf {
     let mut components = path.components().peekable();
     let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
@@ -172,7 +184,7 @@ pub fn extract_import_graph(files: &Vec<ParsedFile>) -> ImportGraph {
             }
         }
     }
-    let nodes = node_map.values().cloned().collect();
+    let nodes = node_map.values().cloned().collect::<Vec<Node>>();
     return ImportGraph { nodes, edges };
 }
 
@@ -250,7 +262,7 @@ pub struct PackageJsonExtract {
 }
 
 pub fn extract_package_json(
-    exports: &Vec<FileExports>,
+    files: &Vec<ParsedFile>,
     package_jsons: Vec<PackageJson>,
 ) -> PackageJsonExtract {
     let mut dependencies: HashMap<String, usize> = HashMap::new();
@@ -259,9 +271,22 @@ pub fn extract_package_json(
             dependencies.insert(d, 0);
         }
     }
-    for ex in exports {
-        if dependencies.contains_key(&ex.source) {
-            *dependencies.get_mut(&ex.source).unwrap() += ex.exports.len();
+    for f in files {
+        for import in f.imports.iter() {
+            let splits = import.source.split('/');
+            let mut package = String::from("");
+            if import.source.starts_with(".") {
+                // Package can't sort with "." - it must be a file import
+                continue;
+            }
+            for s in splits {
+                package.push_str(s);
+                if dependencies.contains_key(&package) {
+                    *dependencies.get_mut(&package).unwrap() += 1;
+                    break;
+                }
+                package.push_str(r"/");
+            }
         }
     }
     return PackageJsonExtract { dependencies };
@@ -274,7 +299,7 @@ pub fn extract(files: Vec<ParsedFile>, package_jsons: Vec<PackageJson>) -> Outpu
     let import_graph = extract_import_graph(&files);
     let dead_files = extract_dead_files(&import_graph);
     let exports = extract_exports(&import_graph);
-    let package_json = extract_package_json(&exports, package_jsons);
+    let package_json = extract_package_json(&files, package_jsons);
     for file in files {
         line_count += file.line_count;
         import_count += file.imports.len();
