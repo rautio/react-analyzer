@@ -70,6 +70,7 @@ export class ExportItem extends LitElement {
   render() {
     const data = parseExports(this.exports);
     const exportNames = Object.keys(data);
+    console.log({exportNames});
     return html`<table>
       <tr>
         <th>Name</th>

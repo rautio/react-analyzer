@@ -15,6 +15,10 @@ export class ExportItems extends LitElement {
   `;
   render() {
     console.log(report);
+    console.log(report.import_graph.edges.sort((a,b) => {
+      if (a.id > b.id) return 1;
+      return -1;
+    }))
     return html`
       <div class="wrapper">
         <h2>Files</h2>
