@@ -1,17 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
-
-interface Export {
-  is_default: boolean;
-  name: string;
-  target: string;
-}
-
-interface Targets {
-  count: number;
-  is_default: boolean;
-  targets: Array<string>;
-}
+import { Export, Targets } from "./index";
 
 const parseExports = (exports: Array<Export>) => {
   // Name -> # of targets, raw targets
@@ -70,7 +59,6 @@ export class ExportItem extends LitElement {
   render() {
     const data = parseExports(this.exports);
     const exportNames = Object.keys(data);
-    console.log({exportNames});
     return html`<table>
       <tr>
         <th>Name</th>

@@ -9,17 +9,16 @@ export enum Nav {
 
 // type OnClick = (nav: Nav) => void;
 
-
 @customElement("nav-header")
 export class NavHeader extends LitElement {
   static styles = css``;
 
   @property({ type: Nav })
-  active = Nav.all
+  active = Nav.all;
 
   // @property({ type: OnClick })
   @property()
-  onClick = () => {}
+  onClick = () => {};
   constructor() {
     super();
   }
@@ -32,9 +31,15 @@ export class NavHeader extends LitElement {
   render() {
     return html`
       <nav>
-        <button @click="${() => this._handleClick(Nav.all)}" class="nav-item">All Files</button>
-        <button @click="${() => this._handleClick(Nav.dead)}" class="nav-item">Dead Files</button>
-        <button @click="${() => this._handleClick(Nav.pJson)}" class="nav-item">Package JSON</button>
+        <button @click="${() => this._handleClick(Nav.all)}" class="nav-item">
+          All Files
+        </button>
+        <button @click="${() => this._handleClick(Nav.dead)}" class="nav-item">
+          Dead Files
+        </button>
+        <button @click="${() => this._handleClick(Nav.pJson)}" class="nav-item">
+          Package JSON
+        </button>
       </nav>
     `;
   }

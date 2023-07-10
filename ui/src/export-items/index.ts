@@ -1,7 +1,27 @@
 import { LitElement, html, css } from "lit";
-import { customElement } from "lit/decorators.js";
-import report from "../report.json";
+import { customElement, property } from "lit/decorators.js";
 import "./export";
+
+export interface Export {
+  is_default: boolean;
+  name: string;
+  target: string;
+}
+
+export interface Targets {
+  count: number;
+  is_default: boolean;
+  targets: Array<string>;
+}
+
+export type Summary = {
+  file_count: number;
+};
+
+export interface Exports {
+  source: String;
+  exports: Array<Export>;
+}
 
 @customElement("export-items")
 export class ExportItems extends LitElement {
@@ -13,18 +33,20 @@ export class ExportItems extends LitElement {
       margin-bottom: 20px;
     }
   `;
+
+  @property({ type: Array })
+  exports: Array<Exports> = [];
+
+  @property({ type: Object })
+  summary: Summary = { file_count: 0 };
+
   render() {
-    console.log(report);
-    console.log(report.import_graph.edges.sort((a,b) => {
-      if (a.id > b.id) return 1;
-      return -1;
-    }))
     return html`
       <div class="wrapper">
         <h2>Files</h2>
-        <div class="summary">Total: ${report.summary.file_count} files</div>
+        <div class="summary">Total: ${this.summary.file_count} files</div>
         <div>
-          ${report.exports.map(
+          ${this.exports.map(
             (ex) =>
               html`<details>
                 <summary>${ex.source}</summary>
