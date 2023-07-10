@@ -36,7 +36,10 @@ export class Container extends LitElement {
     }
     return html`
       <div>
-        <nav-header .onClick="${this.onNav}"></nav-header>
+        <nav-header
+          .active="${this.active}"
+          .onClick="${this.onNav}"
+        ></nav-header>
         ${content}
       </div>
     `;
