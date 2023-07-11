@@ -6,7 +6,6 @@ import "./nav-header";
 import "./export-items";
 import "./dead-files";
 import "./package-json";
-import { table } from "./styles/table";
 
 @customElement("app-container")
 export class Container extends LitElement {
