@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { Export, Targets } from "./index";
+import { table } from "../styles/table";
 
 const parseExports = (exports: Array<Export>) => {
   // Name -> # of targets, raw targets
@@ -24,30 +25,7 @@ const parseExports = (exports: Array<Export>) => {
 @customElement("export-item")
 export class ExportItem extends LitElement {
   static styles = css`
-    table {
-      margin: 10px;
-      margin-left: 20px;
-    }
-    table,
-    td,
-    th {
-      border-collapse: collapse;
-      border: 1px solid;
-      border-color: #063665;
-    }
-    th {
-      background-color: #063665;
-    }
-    td {
-      background-color: #074989;
-    }
-    td.count {
-      text-align: center;
-    }
-    td {
-      padding-left: 1em;
-      padding-right: 1em;
-    }
+    ${table}
   `;
   @property({ type: Array<Export> })
   exports = [];

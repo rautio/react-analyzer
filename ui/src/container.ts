@@ -5,6 +5,8 @@ import { Nav } from "./nav-header";
 import "./nav-header";
 import "./export-items";
 import "./dead-files";
+import "./package-json";
+import { table } from "./styles/table";
 
 @customElement("app-container")
 export class Container extends LitElement {
@@ -30,7 +32,9 @@ export class Container extends LitElement {
         break;
       }
       case Nav.pJson: {
-        content = html`<div>Package JSON</div>`;
+        content = html`<package-json
+          .package_json="${report.package_json}"
+        ></package-json>`;
         break;
       }
     }
