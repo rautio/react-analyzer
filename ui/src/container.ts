@@ -9,7 +9,11 @@ import "./package-json";
 
 @customElement("app-container")
 export class Container extends LitElement {
-  static styles = css``;
+  static styles = css`
+    .wrapper {
+      margin: 20px;
+    }
+  `;
 
   @state()
   active = Nav.all;
@@ -43,7 +47,7 @@ export class Container extends LitElement {
           .active="${this.active}"
           .onClick="${this.onNav}"
         ></nav-header>
-        ${content}
+        <div class="wrapper">${content}</div>
       </div>
     `;
   }

@@ -26,9 +26,6 @@ export interface Exports {
 @customElement("export-items")
 export class ExportItems extends LitElement {
   static styles = css`
-    .wrapper {
-      margin: 20px;
-    }
     .summary {
       margin-bottom: 20px;
     }
@@ -42,7 +39,7 @@ export class ExportItems extends LitElement {
 
   render() {
     return html`
-      <div class="wrapper">
+      <div>
         <h2>Files</h2>
         <div class="summary">Total: ${this.summary.file_count} files</div>
         <div>

@@ -21,7 +21,7 @@ export class PJson extends LitElement {
 
   render() {
     return html`<div>
-      <h2>Dead Files</h2>
+      <h2>Package JSON</h2>
       <table>
         <tr>
           <th>NPM</th>
