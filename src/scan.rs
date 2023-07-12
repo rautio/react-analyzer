@@ -26,18 +26,26 @@ fn find_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> File
     for entry in root_path.read_dir().expect("Unable to read directory.") {
         if let Ok(entry) = entry {
             let file_path = &entry.path();
+            // Skip .git directory
+            if file_path.file_name().unwrap() == ".git" {
+                continue;
+            }
+            // If matches ignore, skip
+            let name = file_path.display().to_string();
+            if ignore_pattern.is_match(&name) {
+                continue;
+            }
             if file_path.file_name().unwrap() == "package.json" {
                 package_json.push(file_path.to_path_buf());
             }
             if file_path.file_name().unwrap() == "tsconfig.json" {
                 ts_config.push(file_path.to_path_buf());
             }
-            let md = metadata(file_path).unwrap();
-            // If matches ignore, skip
-            let name = file_path.display().to_string();
-            if ignore_pattern.is_match(&name) {
-                continue;
+            if file_path.file_name().unwrap() == ".gitignore" {
+                // ts_config.push(file_path.to_path_buf());
+                println!("Found gitignore: {}", file_path.display());
             }
+            let md = metadata(file_path).unwrap();
             if md.is_dir() {
                 let f = &mut find_files(&file_path, pattern, ignore_pattern);
                 all_files.append(&mut f.all_files);
