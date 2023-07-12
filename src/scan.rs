@@ -4,6 +4,7 @@ use crate::languages::ParsedFile;
 use crate::languages::TestFile;
 use crate::package_json;
 use crate::package_json::PackageJson;
+use ignore::Walk;
 use regex::Regex;
 use std::fs;
 use std::fs::metadata;
@@ -23,13 +24,9 @@ fn find_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> File
     let mut package_json: Vec<PathBuf> = Vec::new();
     let mut ts_config: Vec<PathBuf> = Vec::new();
     // Read path and validate
-    for entry in root_path.read_dir().expect("Unable to read directory.") {
+    for entry in Walk::new(root_path) {
         if let Ok(entry) = entry {
-            let file_path = &entry.path();
-            // Skip .git directory
-            if file_path.file_name().unwrap() == ".git" {
-                continue;
-            }
+            let file_path = entry.path();
             // If matches ignore, skip
             let name = file_path.display().to_string();
             if ignore_pattern.is_match(&name) {
@@ -46,12 +43,7 @@ fn find_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> File
                 println!("Found gitignore: {}", file_path.display());
             }
             let md = metadata(file_path).unwrap();
-            if md.is_dir() {
-                let f = &mut find_files(&file_path, pattern, ignore_pattern);
-                all_files.append(&mut f.all_files);
-                package_json.append(&mut f.package_json);
-                ts_config.append(&mut f.ts_config);
-            } else {
+            if !md.is_dir() {
                 // Only add file if it matches pattern
                 if pattern.is_match(&name) {
                     all_files.push(file_path.to_str().unwrap().to_string());

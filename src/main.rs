@@ -27,7 +27,7 @@ fn main() {
         let root = Path::new(&args.path);
         // Default patterns. Need cli or config file to override.
         let pattern = Regex::new(r"^.*\.(jsx|js|tsx|ts)$").unwrap();
-        let ignore_pattern: Regex = Regex::new(r"node_modules|.*.test.js").unwrap();
+        let ignore_pattern: Regex = Regex::new(r".*.test.js").unwrap();
         let test_pattern: Regex = Regex::new(r".*.(cy|test|spec|unit).(jsx|tsx|js|ts)$").unwrap();
         print::input(
             root,
