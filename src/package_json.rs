@@ -9,7 +9,7 @@ pub struct PackageJson {
     pub dependencies: Option<HashMap<String, String>>,
     pub dev_dependencies: Option<HashMap<String, String>>,
     pub peer_dependencies: Option<HashMap<String, String>>,
-    pub file_path: PathBuf,
+    pub file_path: Option<PathBuf>,
 }
 
 pub fn parse(package_jsons: Vec<PathBuf>) -> Vec<PackageJson> {
@@ -24,7 +24,7 @@ pub fn parse(package_jsons: Vec<PathBuf>) -> Vec<PackageJson> {
                 "JSON was not well-formatted in: {}",
                 &p_json.display().to_string()
             ));
-        parsed_p_json.file_path = p_json;
+        parsed_p_json.file_path = Some(p_json);
         result.push(parsed_p_json)
     }
     return result;

@@ -4,9 +4,10 @@ use crate::languages::ParsedFile;
 use crate::languages::TestFile;
 use crate::package_json;
 use crate::package_json::PackageJson;
+use crate::ts_config;
+use crate::ts_config::TypeScriptConfig;
 use ignore::Walk;
 use regex::Regex;
-use std::fs;
 use std::fs::metadata;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
@@ -62,26 +63,17 @@ pub fn scan(
     root_path: &Path,
     pattern: &Regex,
     ignore_pattern: &Regex,
-) -> (Vec<ParsedFile>, Vec<PackageJson>) {
+) -> (Vec<ParsedFile>, Vec<PackageJson>, Vec<TypeScriptConfig>) {
     let now = Instant::now();
     let f = find_files(root_path, pattern, ignore_pattern);
     let mut parsed_files: Vec<ParsedFile> = Vec::new();
     let parsed_package_jsons: Vec<PackageJson> = package_json::parse(f.package_json);
+    let parsed_ts_configs: Vec<TypeScriptConfig> = ts_config::parse(f.ts_config);
     // We need to configure a fixed number of workers so we don't hit OS limits. On Mac the
     // max number of open files is 256 and this can easily be hit if running in a large repo.
     let n_workers = 64; // The performance bottleneck becomes file I/O and not number of threads after a certain point
     let pool = ThreadPool::new(n_workers);
     let (tx, rx) = channel();
-    for t_json in f.ts_config {
-        let file_string = fs::read_to_string(&t_json).expect(&format!(
-            "Unable to read file: {}",
-            &t_json.display().to_string()
-        ));
-        let _: serde_json::Value = serde_json::from_str(file_string.as_str()).expect(&format!(
-            "JSON was not well-formatted in: {}",
-            &t_json.display().to_string()
-        ));
-    }
     let threads: Vec<_> = f
         .all_files
         .into_iter()
@@ -103,7 +95,7 @@ pub fn scan(
     }
     let elapsed = now.elapsed();
     println!("Scan done in: {:.2?}!", elapsed);
-    return (parsed_files, parsed_package_jsons);
+    return (parsed_files, parsed_package_jsons, parsed_ts_configs);
 }
 
 pub fn scan_test_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> Vec<TestFile> {

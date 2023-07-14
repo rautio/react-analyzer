@@ -6,8 +6,10 @@ mod extract;
 mod languages;
 mod output;
 mod package_json;
+mod path_utils;
 mod print;
 mod scan;
+mod ts_config;
 
 #[derive(Parser)]
 #[command(author, version)]
@@ -36,8 +38,8 @@ fn main() {
             test_pattern.clone(),
         );
         // Scan Files
-        let (files, package_jsons) = scan::scan(root, &pattern, &ignore_pattern);
-        let output = extract::extract(files, package_jsons);
+        let (files, package_jsons, ts_configs) = scan::scan(root, &pattern, &ignore_pattern);
+        let output = extract::extract(files, package_jsons, ts_configs);
         let _ = output::write_output(&output);
         println!("=== File Summary ===\n{}\n", output.summary);
         // Scan Test Files

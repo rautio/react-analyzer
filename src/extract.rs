@@ -1,6 +1,9 @@
+use crate::ts_config::get_closest;
+
 use super::languages::ParsedFile;
 use super::languages::TestFile;
 use super::package_json::{list_dependencies, PackageJson};
+use super::ts_config::TypeScriptConfig;
 use serde::Serialize;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -110,12 +113,18 @@ pub fn extract_dead_files(graph: &ImportGraph) -> Vec<String> {
     return dead_files;
 }
 
-pub fn extract_import_graph(files: &Vec<ParsedFile>) -> ImportGraph {
+pub fn extract_import_graph(
+    files: &Vec<ParsedFile>,
+    ts_configs: &Vec<TypeScriptConfig>,
+) -> ImportGraph {
     let mut node_count = 0;
     let mut edge_count = 0;
     let mut node_map: HashMap<String, Node> = HashMap::new();
     let mut edges: Vec<Edge> = Vec::new();
+    // TODO: There are duplicate ts_configs loaded
     for file in files {
+        let _ = get_closest(ts_configs, PathBuf::from(&file.path));
+        // println!("closest config: {:?}", ts_config);
         let file_path = &file.path;
         // Create current file node
         if !node_map.contains_key(file_path) {
@@ -145,6 +154,7 @@ pub fn extract_import_graph(files: &Vec<ParsedFile>) -> ImportGraph {
         }
         // Create source file nodes and edges
         for import in &file.imports {
+            // Normalize import path to a real path or npm module
             let mut src = import.source.clone();
             // Could be: NPM module, alias or genuinely a relative import.
             if src.starts_with(".") {
@@ -292,11 +302,15 @@ pub fn extract_package_json(
     return PackageJsonExtract { dependencies };
 }
 
-pub fn extract(files: Vec<ParsedFile>, package_jsons: Vec<PackageJson>) -> Output {
+pub fn extract(
+    files: Vec<ParsedFile>,
+    package_jsons: Vec<PackageJson>,
+    ts_configs: Vec<TypeScriptConfig>,
+) -> Output {
     let file_count = files.len();
     let mut line_count = 0;
     let mut import_count: usize = 0;
-    let import_graph = extract_import_graph(&files);
+    let import_graph = extract_import_graph(&files, &ts_configs);
     let dead_files = extract_dead_files(&import_graph);
     let exports = extract_exports(&import_graph);
     let package_json = extract_package_json(&files, package_jsons);
