@@ -9,6 +9,7 @@ pub struct PackageJson {
     pub dependencies: Option<HashMap<String, String>>,
     pub dev_dependencies: Option<HashMap<String, String>>,
     pub peer_dependencies: Option<HashMap<String, String>>,
+    pub file_path: PathBuf,
 }
 
 pub fn parse(package_jsons: Vec<PathBuf>) -> Vec<PackageJson> {
@@ -18,11 +19,13 @@ pub fn parse(package_jsons: Vec<PathBuf>) -> Vec<PackageJson> {
             "Unable to read file: {}",
             &p_json.display().to_string()
         ));
-        let p_json: PackageJson = serde_json::from_str(file_string.as_str()).expect(&format!(
-            "JSON was not well-formatted in: {}",
-            &p_json.display().to_string()
-        ));
-        result.push(p_json)
+        let mut parsed_p_json: PackageJson =
+            serde_json::from_str(file_string.as_str()).expect(&format!(
+                "JSON was not well-formatted in: {}",
+                &p_json.display().to_string()
+            ));
+        parsed_p_json.file_path = p_json;
+        result.push(parsed_p_json)
     }
     return result;
 }
