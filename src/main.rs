@@ -39,7 +39,7 @@ fn main() {
         );
         // Scan Files
         let (files, package_jsons, ts_configs) = scan::scan(root, &pattern, &ignore_pattern);
-        let output = extract::extract(files, package_jsons, ts_configs);
+        let output = extract::extract(root, files, package_jsons, ts_configs);
         let _ = output::write_output(&output);
         println!("=== File Summary ===\n{}\n", output.summary);
         // Scan Test Files

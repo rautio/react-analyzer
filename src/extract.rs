@@ -30,6 +30,7 @@ impl std::fmt::Display for Summary {
 pub struct Output {
     pub import_graph: ImportGraph,
     pub dead_files: Vec<String>,
+    pub unknown_imports: Vec<String>,
     pub exports: Vec<FileExports>,
     pub summary: Summary,
     pub package_json: PackageJsonExtract,
@@ -97,7 +98,11 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     ret
 }
 
-pub fn extract_dead_files(graph: &ImportGraph) -> Vec<String> {
+pub fn extract_dead_files(
+    graph: &ImportGraph,
+    dependencies: Vec<String>,
+    root: &Path,
+) -> (Vec<String>, Vec<String>) {
     let mut connected_nodes: HashMap<usize, bool> = HashMap::new();
     // Iterate edges to gather all nodes that are imported or references
     for e in &graph.edges {
@@ -105,12 +110,35 @@ pub fn extract_dead_files(graph: &ImportGraph) -> Vec<String> {
         connected_nodes.insert(e.target, true);
     }
     let mut dead_files: Vec<String> = Vec::new();
+    let mut unknown_imports: Vec<String> = Vec::new();
     for n in &graph.nodes {
         if !connected_nodes.contains_key(&n.id) {
-            dead_files.push(n.path.clone())
+            // Check if the path is a dependency, if so skip
+            let mut src = PathBuf::from("");
+            let mut is_dep = false;
+            for c in PathBuf::from(&n.path).components() {
+                src.push(c);
+                if dependencies.contains(&src.display().to_string()) {
+                    is_dep = true;
+                }
+            }
+            if !is_dep {
+                let ext = match n.clone().extension {
+                    Some(extension) => extension,
+                    None => String::from(""),
+                };
+                // println!("ext: {}", ext);
+                let file_path = Path::new(root).join(Path::new(&n.path)).with_extension(ext);
+                if file_path.exists() {
+                    dead_files.push(n.path.clone());
+                } else {
+                    // println!("doesnt exist: {}", file_path.display());
+                    unknown_imports.push(n.path.clone());
+                }
+            }
         }
     }
-    return dead_files;
+    return (dead_files, unknown_imports);
 }
 
 pub fn extract_import_graph(
@@ -298,9 +326,9 @@ pub fn extract_exports(import_graph: &ImportGraph) -> Vec<FileExports> {
     return file_exports;
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug, Clone)]
 pub struct PackageJsonExtract {
-    dependencies: HashMap<String, usize>,
+    dependencies: HashMap<String, usize>, // Does not account for monorepo
 }
 
 pub fn extract_package_json(
@@ -335,6 +363,7 @@ pub fn extract_package_json(
 }
 
 pub fn extract(
+    root: &Path,
     files: Vec<ParsedFile>,
     package_jsons: Vec<PackageJson>,
     ts_configs: Vec<TypeScriptConfig>,
@@ -343,9 +372,10 @@ pub fn extract(
     let mut line_count = 0;
     let mut import_count: usize = 0;
     let import_graph = extract_import_graph(&files, &ts_configs);
-    let dead_files = extract_dead_files(&import_graph);
-    let exports = extract_exports(&import_graph);
     let package_json = extract_package_json(&files, package_jsons);
+    let dependencies = package_json.clone().dependencies.into_keys().collect();
+    let (dead_files, unknown_imports) = extract_dead_files(&import_graph, dependencies, root);
+    let exports = extract_exports(&import_graph);
     for file in files {
         line_count += file.line_count;
         import_count += file.imports.len();
@@ -359,6 +389,7 @@ pub fn extract(
     return Output {
         import_graph,
         dead_files,
+        unknown_imports,
         exports,
         summary,
         package_json,

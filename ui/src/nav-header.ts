@@ -4,6 +4,7 @@ import { customElement, property } from "lit/decorators.js";
 export enum Nav {
   all,
   dead,
+  unknown,
   pJson,
 }
 
@@ -54,6 +55,12 @@ export class NavHeader extends LitElement {
           class="nav-item ${this.active == Nav.dead ? "active" : ""}"
         >
           Dead Files
+        </button>
+        <button
+          @click="${() => this._handleClick(Nav.unknown)}"
+          class="nav-item ${this.active == Nav.unknown ? "active" : ""}"
+        >
+          Unknown Imports
         </button>
         <button
           @click="${() => this._handleClick(Nav.pJson)}"

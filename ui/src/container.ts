@@ -5,6 +5,7 @@ import { Nav } from "./nav-header";
 import "./nav-header";
 import "./export-items";
 import "./dead-files";
+import "./unknown-imports";
 import "./package-json";
 
 @customElement("app-container")
@@ -33,6 +34,12 @@ export class Container extends LitElement {
         content = html`<dead-files
           .dead_files="${report.dead_files}"
         ></dead-files>`;
+        break;
+      }
+      case Nav.unknown: {
+        content = html`<unknown-imports
+          .unknown_imports="${report.unknown_imports}"
+        ></unknown-imports>`;
         break;
       }
       case Nav.pJson: {

@@ -1,12 +1,12 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 
-@customElement("dead-files")
-export class DeadFiles extends LitElement {
+@customElement("unknown-imports")
+export class UnknownImports extends LitElement {
   static styles = css``;
 
   @property({ type: Array })
-  dead_files: Array<String> = [];
+  unknown_imports: Array<String> = [];
 
   constructor() {
     super();
@@ -14,9 +14,9 @@ export class DeadFiles extends LitElement {
 
   render() {
     return html`<div>
-      <h2>Unimported Files</h2>
+      <h2>Unknown Imports</h2>
       <ul>
-        ${this.dead_files.sort((a,b) => {
+        ${this.unknown_imports.sort((a,b) => {
           if (a > b) return 1;
           return -1;
         }).map((file) => html`<li>${file}</li>`)}
