@@ -39,12 +39,8 @@ fn find_files(root_path: &Path, pattern: &Regex, ignore_pattern: &Regex) -> File
             if file_path.file_name().unwrap() == "tsconfig.json" {
                 ts_config.push(file_path.to_path_buf());
             }
-            if file_path.file_name().unwrap() == ".gitignore" {
-                // ts_config.push(file_path.to_path_buf());
-                println!("Found gitignore: {}", file_path.display());
-            }
-            let md = metadata(file_path).unwrap();
-            if !md.is_dir() {
+            let md = metadata(file_path);
+            if md.is_ok() && !md.unwrap().is_dir() {
                 // Only add file if it matches pattern
                 if pattern.is_match(&name) {
                     all_files.push(file_path.to_str().unwrap().to_string());
