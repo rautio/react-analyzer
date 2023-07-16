@@ -4,12 +4,8 @@ use std::path::PathBuf;
 pub fn path_distance(path_a: PathBuf, path_b: PathBuf) -> usize {
     let mut a = path_a; // A is shorter
     let mut b = path_b;
-    println!("a: {}", a.display());
-    println!("b: {}", b.display());
     if a.cmp(&b).is_eq() {
         return 0;
-    } else {
-        println!("Not equal: {} vs {}", a.display(), b.display());
     }
     if a.components().count() > b.components().count() {
         a.pop();
