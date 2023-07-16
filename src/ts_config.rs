@@ -82,3 +82,6 @@ pub fn get_closest(ts_configs: &Vec<TypeScriptConfig>, path: PathBuf) -> Option<
 pub fn get_aliases(ts_config: Option<TypeScriptConfig>) -> Option<HashMap<String, Vec<String>>> {
     return ts_config?.compiler_options?.paths;
 }
+pub fn get_base_path(ts_config: Option<TypeScriptConfig>) -> Option<String> {
+    return ts_config?.compiler_options?.base_url;
+}

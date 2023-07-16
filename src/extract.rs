@@ -1,4 +1,4 @@
-use crate::ts_config::get_closest;
+use crate::ts_config::{get_aliases, get_base_path, get_closest};
 
 use super::languages::ParsedFile;
 use super::languages::TestFile;
@@ -121,10 +121,10 @@ pub fn extract_import_graph(
     let mut edge_count = 0;
     let mut node_map: HashMap<String, Node> = HashMap::new();
     let mut edges: Vec<Edge> = Vec::new();
-    // TODO: There are duplicate ts_configs loaded
     for file in files {
-        let _ = get_closest(ts_configs, PathBuf::from(&file.path));
-        // println!("closest config: {:?}", ts_config);
+        let ts_config = get_closest(ts_configs, PathBuf::from(&file.path));
+        let aliases = get_aliases(ts_config.cloned());
+        let base_path = get_base_path(ts_config.cloned());
         let file_path = &file.path;
         // Create current file node
         if !node_map.contains_key(file_path) {
@@ -165,6 +165,38 @@ pub fn extract_import_graph(
                 let source_path = Path::new(&file_path).join(Path::new(&src));
                 // Normalize to a real path
                 src = normalize_path(&source_path).display().to_string();
+            } else {
+                match aliases.clone() {
+                    Some(aliases) => {
+                        let ts_config_path = &ts_config.unwrap().file_path;
+                        for alias in aliases.clone().into_keys() {
+                            let mut my_alias = alias.as_str();
+                            let mut value = aliases.get(&alias).unwrap()[0].as_str();
+                            // Ends with '*' means it matches on subpaths.
+                            if my_alias.ends_with(r"*") {
+                                my_alias = my_alias.strip_suffix(r"*").unwrap();
+                                value = value.strip_suffix(r"*").unwrap();
+                            }
+                            if src.starts_with(&my_alias) {
+                                // Aliases are relative to the ts_config location
+                                let mut path = PathBuf::from(ts_config_path.clone().unwrap());
+                                path.pop(); // Last component is the file name
+                                            // Need to account for a base path if one is specified
+                                match base_path.clone() {
+                                    Some(base_path) => {
+                                        path = path.join(PathBuf::from(base_path));
+                                    }
+                                    None => {}
+                                }
+                                src = src.replace(&my_alias, value);
+                                path = path.join(PathBuf::from(&src));
+                                // Normalize the final path
+                                src = normalize_path(&PathBuf::from(path)).display().to_string();
+                            }
+                        }
+                    }
+                    None => {}
+                }
             }
             if src.ends_with('/') {
                 src.pop();
