@@ -19,7 +19,7 @@ pub struct TypeScriptConfig {
     pub file_path: Option<String>,
 }
 
-pub fn parse(ts_configs: Vec<PathBuf>) -> Vec<TypeScriptConfig> {
+pub fn parse(ts_configs: Vec<PathBuf>, root_prefix: PathBuf) -> Vec<TypeScriptConfig> {
     let mut result: Vec<TypeScriptConfig> = Vec::new();
     for ts_config in ts_configs {
         let file_string = fs::read_to_string(&ts_config).expect(&format!(
@@ -31,7 +31,14 @@ pub fn parse(ts_configs: Vec<PathBuf>) -> Vec<TypeScriptConfig> {
                 "JSON was not well-formatted in: {}",
                 &ts_config.display().to_string()
             ));
-        parsed_ts_config.file_path = Some(ts_config.display().to_string());
+        // Remove root path
+        parsed_ts_config.file_path = Some(
+            ts_config
+                .strip_prefix(&root_prefix)
+                .unwrap()
+                .display()
+                .to_string(),
+        );
         result.push(parsed_ts_config)
     }
     return result;
@@ -50,7 +57,8 @@ pub fn get_closest(ts_configs: &Vec<TypeScriptConfig>, path: PathBuf) -> Option<
     let mut closest_distance = 0;
     for config in ts_configs {
         let cur_config = config;
-        let config_path = PathBuf::from(&cur_config.file_path.as_ref().unwrap());
+        let mut config_path = PathBuf::from(&cur_config.file_path.as_ref().unwrap());
+        config_path.pop(); // Last component is the actual
         if path.starts_with(&config_path) {
             // let closest_distance = path_distance(closest_path.to_path_buf(), path.clone());
             // It's a match
@@ -69,4 +77,8 @@ pub fn get_closest(ts_configs: &Vec<TypeScriptConfig>, path: PathBuf) -> Option<
         }
     }
     return closest;
+}
+
+pub fn get_aliases(ts_config: Option<TypeScriptConfig>) -> Option<HashMap<String, Vec<String>>> {
+    return ts_config?.compiler_options?.paths;
 }
