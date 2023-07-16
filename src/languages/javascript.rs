@@ -39,6 +39,9 @@ impl JavaScript {
         for item in parsed.tree().items() {
             if item.as_js_import().is_some() {
                 // Import
+                if item.as_js_import().unwrap().import_clause().is_err() {
+                    continue;
+                }
                 let import_clause = item.as_js_import().unwrap().import_clause().unwrap();
                 if import_clause.as_js_import_named_clause().is_some() {
                     // Named import!
@@ -50,14 +53,18 @@ impl JavaScript {
                             .unwrap()
                             .as_fields()
                             .specifiers;
-                        imports.push(Import {
-                            file_path: file_path.clone(),
-                            source: named_clause
+                        let mut source = String::from("");
+                        if named_clause.as_fields().source.is_ok() {
+                            source = named_clause
                                 .as_fields()
                                 .source
                                 .unwrap()
                                 .text()
-                                .replace(&['\'', '"'][..], ""),
+                                .replace(&['\'', '"'][..], "");
+                        }
+                        imports.push(Import {
+                            file_path: file_path.clone(),
+                            source,
                             is_default: named_clause.as_fields().default_specifier.is_some(),
                             named: import_specifiers
                                 .syntax()
@@ -73,14 +80,18 @@ impl JavaScript {
                 if import_clause.as_js_import_default_clause().is_some() {
                     // Default import!
                     let default = import_clause.as_js_import_default_clause().unwrap();
-                    imports.push(Import {
-                        file_path: file_path.clone(),
-                        source: default
+                    let mut source = String::from("");
+                    if default.as_fields().source.is_ok() {
+                        source = default
                             .as_fields()
                             .source
                             .unwrap()
                             .text()
-                            .replace(&['\'', '"'][..], ""),
+                            .replace(&['\'', '"'][..], "");
+                    }
+                    imports.push(Import {
+                        file_path: file_path.clone(),
+                        source,
                         is_default: true,
                         named: Vec::new(),
                         line: 0,
@@ -88,14 +99,18 @@ impl JavaScript {
                 }
                 if import_clause.as_js_import_namespace_clause().is_some() {
                     let default = import_clause.as_js_import_namespace_clause().unwrap();
-                    imports.push(Import {
-                        file_path: file_path.clone(),
-                        source: default
+                    let mut source = String::from("");
+                    if default.as_fields().source.is_ok() {
+                        source = default
                             .as_fields()
                             .source
                             .unwrap()
                             .text()
-                            .replace(&['\'', '"'][..], ""),
+                            .replace(&['\'', '"'][..], "");
+                    }
+                    imports.push(Import {
+                        file_path: file_path.clone(),
+                        source,
                         is_default: true,
                         named: Vec::new(),
                         line: 0,
@@ -104,6 +119,9 @@ impl JavaScript {
             }
             if item.as_js_export().is_some() {
                 let export = item.as_js_export().unwrap();
+                if export.export_clause().is_err() {
+                    continue;
+                }
                 let export_clause = export.export_clause().unwrap();
 
                 if export_clause.as_js_export_named_from_clause().is_some() {
@@ -153,36 +171,56 @@ impl JavaScript {
                     })
                 }
                 if export_clause.as_js_export_from_clause().is_some() {
+                    let mut source = String::from("");
+                    if export_clause
+                        .as_js_export_from_clause()
+                        .unwrap()
+                        .as_fields()
+                        .source
+                        .is_ok()
+                    {
+                        source = export_clause
+                            .as_js_export_from_clause()
+                            .unwrap()
+                            .as_fields()
+                            .source
+                            .unwrap()
+                            .to_string();
+                    }
                     // Export from
                     exports.push(Export {
                         file_path: file_path.clone(),
                         line: 0,
                         default: String::from(""),
                         named: vec![],
-                        source: export_clause
-                            .as_js_export_from_clause()
-                            .unwrap()
-                            .as_fields()
-                            .source
-                            .unwrap()
-                            .to_string(),
+                        source,
                     })
                 }
                 if export_clause
                     .as_js_export_default_expression_clause()
                     .is_some()
                 {
-                    exports.push(Export {
-                        file_path: file_path.clone(),
-                        line: 0,
-                        named: vec![],
-                        default: export_clause
+                    let mut default = String::from("");
+                    if export_clause
+                        .as_js_export_default_expression_clause()
+                        .unwrap()
+                        .as_fields()
+                        .expression
+                        .is_ok()
+                    {
+                        default = export_clause
                             .as_js_export_default_expression_clause()
                             .unwrap()
                             .as_fields()
                             .expression
                             .unwrap()
-                            .to_string(),
+                            .to_string();
+                    }
+                    exports.push(Export {
+                        file_path: file_path.clone(),
+                        line: 0,
+                        named: vec![],
+                        default,
                         source: String::from(""),
                     })
                 }
