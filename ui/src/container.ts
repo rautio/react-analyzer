@@ -26,6 +26,7 @@ export class Container extends LitElement {
     console.log(report);
     let content = html`<export-items
       .exports="${report.exports}"
+      .summary="${report.summary}"
     ></export-items>`;
     switch (this.active) {
       case Nav.dead: {
