@@ -1,5 +1,6 @@
 use super::path_utils::path_distance;
 use serde::{Deserialize, Serialize};
+use serde_jsonrc;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
@@ -25,7 +26,7 @@ pub fn parse(ts_configs: Vec<PathBuf>) -> Vec<TypeScriptConfig> {
             "Unable to read file: {}",
             &ts_config.display().to_string()
         ));
-        let mut parsed_ts_config: TypeScriptConfig = serde_json::from_str(file_string.as_str())
+        let mut parsed_ts_config: TypeScriptConfig = serde_jsonrc::from_str(file_string.as_str())
             .expect(&format!(
                 "JSON was not well-formatted in: {}",
                 &ts_config.display().to_string()
