@@ -154,6 +154,37 @@ pub fn extract_import_graph(
         let aliases = get_aliases(ts_config.cloned());
         let base_path = get_base_path(ts_config.cloned());
         let file_path = &file.path;
+        let path = PathBuf::from(&file.path).with_extension("");
+        let file_name = match path.file_name() {
+            Some(n) => match n.to_str() {
+                Some(s) => s,
+                None => "",
+            },
+            None => "",
+        };
+        let dir = match &path.parent() {
+            Some(path) => path.clone().display().to_string(),
+            None => String::from(""),
+        };
+        // Way may have mapped an "index" file in which case only the directory name exists in the node_map
+        if node_map.contains_key(&dir) && file_name == "index" {
+            // Mapping to the parent
+            let old = node_map.get(&dir).unwrap();
+            let id = old.id;
+            let line_count = old.line_count;
+            let real = PathBuf::from(&file.path);
+            node_map.remove(&dir);
+            node_map.insert(
+                file_path.to_string(),
+                Node {
+                    id,
+                    path: file_path.to_string(),
+                    file_name: Some(real.file_name().unwrap().to_str().unwrap().to_string()),
+                    extension: Some(real.extension().unwrap().to_str().unwrap().to_string()),
+                    line_count,
+                },
+            );
+        }
         // Create current file node
         if !node_map.contains_key(file_path) {
             node_map.insert(
