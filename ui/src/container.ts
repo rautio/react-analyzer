@@ -25,6 +25,8 @@ export class Container extends LitElement {
 
   render() {
     console.log(report);
+    // @ts-ignore
+    window.report = report;
     let content = html`<export-items
       .exports="${report.exports}"
       .summary="${report.summary}"

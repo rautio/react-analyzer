@@ -127,12 +127,10 @@ pub fn extract_dead_files(
                     Some(extension) => extension,
                     None => String::from(""),
                 };
-                // println!("ext: {}", ext);
                 let file_path = Path::new(root).join(Path::new(&n.path)).with_extension(ext);
                 if file_path.exists() {
                     dead_files.push(n.path.clone());
                 } else {
-                    // println!("doesnt exist: {}", file_path.display());
                     unknown_imports.push(n.path.clone());
                 }
             }
@@ -247,8 +245,8 @@ pub fn extract_import_graph(
                                     }
                                     None => {}
                                 }
-                                src = src.replace(&my_alias, value);
-                                path = path.join(PathBuf::from(&src));
+                                let replaced = src.replace(&my_alias, value);
+                                path = path.join(PathBuf::from(&replaced));
                                 // Normalize the final path
                                 src = normalize_path(&PathBuf::from(path)).display().to_string();
                             }
@@ -273,6 +271,7 @@ pub fn extract_import_graph(
                 );
                 node_count += 1;
             }
+            // Map all named imports to this source
             for name in &import.named {
                 edges.push(Edge {
                     id: edge_count,
@@ -280,6 +279,17 @@ pub fn extract_import_graph(
                     target: node_map.get(file_path).unwrap().id,
                     is_default: import.is_default,
                     name: name.to_string(),
+                });
+                edge_count += 1;
+            }
+            // If it has a default, map that as well
+            if import.is_default {
+                edges.push(Edge {
+                    id: edge_count,
+                    source: node_map.get(&src).unwrap().id,
+                    target: node_map.get(file_path).unwrap().id,
+                    is_default: import.is_default,
+                    name: String::from(""),
                 });
                 edge_count += 1;
             }
