@@ -308,8 +308,8 @@ pub struct Export {
 
 #[derive(Serialize)]
 pub struct FileExports {
-    source: String,
-    exports: Vec<Export>,
+    pub source: String,
+    pub exports: Vec<Export>,
 }
 
 #[derive(Debug)]

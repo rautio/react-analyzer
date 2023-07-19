@@ -1,0 +1,11 @@
+<html>
+  <title>{{file_name}}</title>
+  <p>Hello
+    {{file_name}}!</p>
+  <p>Exports: </p>
+  <ul>
+  {{#each exports}}
+    <li>{{ this }}</li>
+    </ul>
+{{/each}}
+</html>
