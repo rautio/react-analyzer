@@ -1,11 +1,20 @@
-<html>
-  <title>{{file_name}}</title>
-  <p>Hello
-    {{file_name}}!</p>
-  <p>Exports: </p>
-  <ul>
-  {{#each exports}}
-    <li>{{ this }}</li>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>React Analyzer: {{file_name}}</title>
+  </head>
+  <body>
+    <h1 class="title">React Analyzer</h1>
+    <app-container />
+    <p>Hello
+      {{file_name}}!</p>
+    <p>Exports: </p>
+    <ul>
+      {{#each exports}}
+        <li>{{this}}</li>
+      {{/each}}
     </ul>
-{{/each}}
+  </body>
 </html>
