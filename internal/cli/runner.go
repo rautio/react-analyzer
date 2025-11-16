@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/oskari/react-analyzer/internal/parser"
 )
 
 // Options contains CLI configuration
@@ -29,19 +31,39 @@ func Run(filePath string, opts *Options) int {
 		return 2
 	}
 
-	// TODO: Parse file and run analysis
-	// For now, just return success
-	_ = content // Will be used when we add the parser
+	// Create parser
+	p, err := parser.NewParser()
+	if err != nil {
+		printError(fmt.Errorf("failed to initialize parser: %v", err), opts.NoColor)
+		return 2
+	}
+	defer p.Close()
+
+	// Parse file
+	ast, err := p.ParseFile(filePath, content)
+	if err != nil {
+		printError(fmt.Errorf("failed to parse file: %v", err), opts.NoColor)
+		return 2
+	}
+	defer ast.Close()
 
 	if opts.Verbose {
 		fmt.Printf("React Analyzer v0.1.0\n")
 		fmt.Printf("Analyzing: %s\n", filePath)
 		fmt.Printf("File size: %d bytes\n", len(content))
+
+		// Count hooks found
+		hookCount := countHooks(ast)
+		if hookCount > 0 {
+			fmt.Printf("Found %d React hook call(s)\n", hookCount)
+		}
+
 		fmt.Printf("\nRules enabled:\n")
 		fmt.Printf("  ✓ no-object-deps      Prevent inline objects in hook dependencies\n\n")
 	}
 
-	// Mock result for now
+	// TODO: Run rule analysis
+	// For now, just return success after successful parsing
 	if !opts.Quiet {
 		fmt.Printf("✓ No issues found in %s\n", filePath)
 	}
@@ -92,4 +114,16 @@ func printError(err error, noColor bool) {
 		// Red color for errors
 		fmt.Fprintf(os.Stderr, "\033[31m✖ Error:\033[0m %v\n", err)
 	}
+}
+
+// countHooks counts the number of React hook calls in the AST
+func countHooks(ast *parser.AST) int {
+	count := 0
+	ast.Root.Walk(func(node *parser.Node) bool {
+		if node.IsHookCall() {
+			count++
+		}
+		return true
+	})
+	return count
 }
