@@ -12,10 +12,10 @@ func PrintHelp(w io.Writer) {
 Static analysis tool for React performance issues.
 
 USAGE:
-    react-analyzer [OPTIONS] <file>
+    react-analyzer [OPTIONS] <path>
 
 ARGUMENTS:
-    <file>    Path to React/TypeScript file to analyze
+    <path>    File or directory to analyze (.tsx, .jsx, .ts, .js)
 
 OPTIONS:
     -h, --help         Show this help message
@@ -25,8 +25,9 @@ OPTIONS:
         --no-color     Disable colored output
 
 EXAMPLES:
-    react-analyzer src/App.tsx
-    react-analyzer --verbose src/components/Dashboard.tsx
+    react-analyzer src/App.tsx              # Analyze single file
+    react-analyzer src/                     # Analyze directory
+    react-analyzer --verbose .              # Analyze entire project
 
 RULES:
     no-object-deps     Prevent inline objects in hook dependencies
