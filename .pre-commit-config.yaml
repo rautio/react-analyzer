@@ -1,8 +1,30 @@
 repos:
--   repo: https://github.com/dnephin/pre-commit-golang
-    rev: v0.5.1
+-   repo: local
     hooks:
     -   id: go-fmt
+        name: go-fmt
+        entry: gofmt -w -l
+        language: system
+        files: \.go$
+        pass_filenames: true
+
     -   id: go-vet
+        name: go-vet
+        entry: bash -c 'go vet ./...'
+        language: system
+        files: \.go$
+        pass_filenames: false
+
     -   id: go-build
+        name: go-build
+        entry: bash -c 'go build ./...'
+        language: system
+        files: \.go$
+        pass_filenames: false
+
     -   id: go-mod-tidy
+        name: go-mod-tidy
+        entry: bash -c 'go mod tidy'
+        language: system
+        files: (\.go|go\.mod|go\.sum)$
+        pass_filenames: false

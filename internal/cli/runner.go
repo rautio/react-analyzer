@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/oskari/react-analyzer/internal/parser"
+	"github.com/oskari/react-analyzer/internal/rules"
 )
 
 // Options contains CLI configuration
@@ -62,13 +63,23 @@ func Run(filePath string, opts *Options) int {
 		fmt.Printf("  ✓ no-object-deps      Prevent inline objects in hook dependencies\n\n")
 	}
 
-	// TODO: Run rule analysis
-	// For now, just return success after successful parsing
-	if !opts.Quiet {
-		fmt.Printf("✓ No issues found in %s\n", filePath)
+	// Run rule analysis
+	rule := &rules.NoObjectDeps{}
+	issues := rule.Check(ast)
+
+	// Display results
+	if len(issues) == 0 {
+		if !opts.Quiet {
+			printSuccess(fmt.Sprintf("No issues found in %s", filePath), opts.NoColor)
+		}
+		return 0
 	}
 
-	return 0
+	// Print issues
+	printIssues(issues, opts)
+
+	// Return exit code 1 when issues are found
+	return 1
 }
 
 // validateFile checks if the file exists and has a valid extension
@@ -114,6 +125,47 @@ func printError(err error, noColor bool) {
 		// Red color for errors
 		fmt.Fprintf(os.Stderr, "\033[31m✖ Error:\033[0m %v\n", err)
 	}
+}
+
+// printSuccess formats and prints a success message
+func printSuccess(message string, noColor bool) {
+	if noColor {
+		fmt.Printf("✓ %s\n", message)
+	} else {
+		// Green color for success
+		fmt.Printf("\033[32m✓\033[0m %s\n", message)
+	}
+}
+
+// printIssues formats and prints rule violations
+func printIssues(issues []rules.Issue, opts *Options) {
+	// Print summary
+	issueWord := "issue"
+	if len(issues) > 1 {
+		issueWord = "issues"
+	}
+
+	if opts.NoColor {
+		fmt.Printf("\n✖ Found %d %s:\n\n", len(issues), issueWord)
+	} else {
+		fmt.Printf("\n\033[31m✖ Found %d %s:\033[0m\n\n", len(issues), issueWord)
+	}
+
+	// Print each issue
+	for _, issue := range issues {
+		// Format: filename:line:column - [rule] message
+		location := fmt.Sprintf("%s:%d:%d", issue.FilePath, issue.Line, issue.Column+1)
+
+		if opts.NoColor {
+			fmt.Printf("%s - [%s] %s\n", location, issue.Rule, issue.Message)
+		} else {
+			// Gray for location, yellow for rule, white for message
+			fmt.Printf("\033[90m%s\033[0m - \033[33m[%s]\033[0m %s\n",
+				location, issue.Rule, issue.Message)
+		}
+	}
+
+	fmt.Println() // Empty line after issues
 }
 
 // countHooks counts the number of React hook calls in the AST
