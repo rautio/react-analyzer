@@ -56,9 +56,20 @@ func Run(path string, opts *Options) int {
 		filesToAnalyze = []string{path}
 	}
 
+	// Create rule registry
+	registry := rules.NewRegistry()
+
 	// Print analysis start for directories
 	if len(filesToAnalyze) > 1 && !opts.Quiet {
 		fmt.Printf("Analyzing %d files...\n\n", len(filesToAnalyze))
+	}
+
+	if opts.Verbose {
+		fmt.Printf("Rules enabled: %d\n", registry.Count())
+		for _, rule := range registry.GetRules() {
+			fmt.Printf("  - %s\n", rule.Name())
+		}
+		fmt.Println()
 	}
 
 	// Analyze all files
@@ -67,7 +78,7 @@ func Run(path string, opts *Options) int {
 	filesAnalyzed := 0
 
 	for _, filePath := range filesToAnalyze {
-		issues, err := analyzeFile(filePath, opts)
+		issues, err := analyzeFile(filePath, registry, opts)
 		if err != nil {
 			// Print error but continue with other files
 			fmt.Fprintf(os.Stderr, "Warning: skipping %s: %v\n", filePath, err)
@@ -101,7 +112,7 @@ func Run(path string, opts *Options) int {
 }
 
 // analyzeFile analyzes a single file and returns issues
-func analyzeFile(filePath string, opts *Options) ([]rules.Issue, error) {
+func analyzeFile(filePath string, registry *rules.Registry, opts *Options) ([]rules.Issue, error) {
 	// Read file content
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -130,9 +141,8 @@ func analyzeFile(filePath string, opts *Options) ([]rules.Issue, error) {
 		}
 	}
 
-	// Run rule analysis
-	rule := &rules.NoObjectDeps{}
-	issues := rule.Check(ast)
+	// Run all registered rules
+	issues := registry.RunAll(ast)
 
 	return issues, nil
 }
