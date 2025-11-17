@@ -7,23 +7,38 @@ import (
 	"github.com/rautio/react-analyzer/internal/parser"
 )
 
-// MemoizedComponentUnstableProps detects when a parent passes unstable props to a memoized child component
-// This is anti-pattern #5 from the catalog: React.memo is useless when parent passes unstable props
-type MemoizedComponentUnstableProps struct{}
+// UnstablePropsToMemo detects when unstable props are passed to memoized contexts:
+// 1. Parent passes unstable props to React.memo components
+// 2. useMemo/useCallback depend on unstable props from parent
+// This breaks memoization and causes unnecessary re-renders
+type UnstablePropsToMemo struct{}
 
 // Name returns the rule identifier
-func (r *MemoizedComponentUnstableProps) Name() string {
-	return "memoized-component-unstable-props"
+func (r *UnstablePropsToMemo) Name() string {
+	return "unstable-props-to-memo"
 }
 
-// Check analyzes an AST for inline props passed to memoized components
-func (r *MemoizedComponentUnstableProps) Check(ast *parser.AST, resolver *analyzer.ModuleResolver) []Issue {
+// Check analyzes an AST for unstable props breaking memoization
+func (r *UnstablePropsToMemo) Check(ast *parser.AST, resolver *analyzer.ModuleResolver) []Issue {
 	var issues []Issue
 
 	// Skip if resolver is not available (shouldn't happen, but safety check)
 	if resolver == nil {
 		return nil
 	}
+
+	// Detection 1: React.memo components with unstable props
+	issues = append(issues, r.checkMemoComponentProps(ast, resolver)...)
+
+	// Detection 2: useMemo/useCallback with unstable prop dependencies
+	issues = append(issues, r.checkMemoHookDeps(ast, resolver)...)
+
+	return issues
+}
+
+// checkMemoComponentProps finds JSX elements rendering memoized components with unstable props
+func (r *UnstablePropsToMemo) checkMemoComponentProps(ast *parser.AST, resolver *analyzer.ModuleResolver) []Issue {
+	var issues []Issue
 
 	// Walk the AST to find JSX elements
 	ast.Root.Walk(func(node *parser.Node) bool {
@@ -67,6 +82,76 @@ func (r *MemoizedComponentUnstableProps) Check(ast *parser.AST, resolver *analyz
 	return issues
 }
 
+// checkMemoHookDeps finds useMemo/useCallback hooks with unstable prop dependencies
+func (r *UnstablePropsToMemo) checkMemoHookDeps(ast *parser.AST, resolver *analyzer.ModuleResolver) []Issue {
+	var issues []Issue
+
+	// Walk the AST to find function declarations (potential React components)
+	ast.Root.Walk(func(node *parser.Node) bool {
+		nodeType := node.Type()
+		if nodeType != "function_declaration" && nodeType != "arrow_function" && nodeType != "function" {
+			return true
+		}
+
+		// Only analyze React components (functions that return JSX)
+		// For now, we'll check all functions - can optimize later
+
+		// Find useMemo/useCallback calls in this function
+		node.Walk(func(hookNode *parser.Node) bool {
+			if !hookNode.IsHookCall() {
+				return true
+			}
+
+			// Check if it's useMemo or useCallback
+			callee := r.getCalleeNode(hookNode)
+			if callee == nil {
+				return true
+			}
+
+			hookName := callee.Text()
+			if hookName != "useMemo" && hookName != "useCallback" {
+				return true
+			}
+
+			// Get dependency array
+			deps := hookNode.GetDependencyArray()
+			if deps == nil {
+				return true
+			}
+
+			// Check each dependency to see if it's a prop
+			for _, dep := range deps.GetArrayElements() {
+				depName := dep.Text()
+
+				// Check if this dependency is a prop (function parameter)
+				if !IsPropIdentifier(depName, node) {
+					continue // Not a prop, skip
+				}
+
+				// Now we need to check if the parent component passes an unstable value to this prop
+				// This requires finding where this component is used and checking the prop value
+				// For now, we'll report a warning that a prop is being used in memo deps
+				// In the future, we can do full cross-file analysis like React.memo
+
+				line, col := dep.StartPoint()
+				issues = append(issues, Issue{
+					Rule:     r.Name(),
+					Message:  fmt.Sprintf("%s depends on prop '%s' which may be unstable from parent", hookName, depName),
+					FilePath: ast.FilePath,
+					Line:     line + 1,
+					Column:   col,
+				})
+			}
+
+			return true
+		})
+
+		return true
+	})
+
+	return issues
+}
+
 // unstableProp represents a prop that's unstable (inline object/array/function)
 type unstableProp struct {
 	propType string // "object", "array", "function"
@@ -75,7 +160,7 @@ type unstableProp struct {
 }
 
 // getOpeningElement gets the jsx_opening_element from a JSX element
-func (r *MemoizedComponentUnstableProps) getOpeningElement(node *parser.Node) *parser.Node {
+func (r *UnstablePropsToMemo) getOpeningElement(node *parser.Node) *parser.Node {
 	nodeType := node.Type()
 
 	if nodeType == "jsx_self_closing_element" {
@@ -94,7 +179,7 @@ func (r *MemoizedComponentUnstableProps) getOpeningElement(node *parser.Node) *p
 }
 
 // getComponentName extracts the component name from a JSX opening element
-func (r *MemoizedComponentUnstableProps) getComponentName(openingElement *parser.Node) string {
+func (r *UnstablePropsToMemo) getComponentName(openingElement *parser.Node) string {
 	for _, child := range openingElement.Children() {
 		nodeType := child.Type()
 		if nodeType == "identifier" || nodeType == "jsx_identifier" {
@@ -105,7 +190,7 @@ func (r *MemoizedComponentUnstableProps) getComponentName(openingElement *parser
 }
 
 // isComponentMemoized checks if a component is wrapped in React.memo
-func (r *MemoizedComponentUnstableProps) isComponentMemoized(componentName string, currentFile string, resolver *analyzer.ModuleResolver) (bool, error) {
+func (r *UnstablePropsToMemo) isComponentMemoized(componentName string, currentFile string, resolver *analyzer.ModuleResolver) (bool, error) {
 	// Load the current module to check imports
 	module, err := resolver.GetModule(currentFile)
 	if err != nil {
@@ -167,7 +252,7 @@ func (r *MemoizedComponentUnstableProps) isComponentMemoized(componentName strin
 }
 
 // findUnstableProps finds all props that are inline objects/arrays/functions
-func (r *MemoizedComponentUnstableProps) findUnstableProps(openingElement *parser.Node) []unstableProp {
+func (r *UnstablePropsToMemo) findUnstableProps(openingElement *parser.Node) []unstableProp {
 	var unstableProps []unstableProp
 
 	// Walk through the opening element to find jsx_attribute nodes
@@ -209,4 +294,13 @@ func (r *MemoizedComponentUnstableProps) findUnstableProps(openingElement *parse
 	})
 
 	return unstableProps
+}
+
+// getCalleeNode gets the function being called from a call_expression
+func (r *UnstablePropsToMemo) getCalleeNode(callNode *parser.Node) *parser.Node {
+	if callNode.Type() != "call_expression" {
+		return nil
+	}
+
+	return callNode.ChildByFieldName("function")
 }

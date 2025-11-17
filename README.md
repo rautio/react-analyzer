@@ -145,7 +145,39 @@ fi
 
 ## Rules
 
-### no-object-deps (In Development)
+### unstable-props-to-memo
+
+Detects when unstable props break memoization in React.memo components, useMemo, and useCallback hooks. **Requires cross-file analysis** to detect violations that ESLint cannot catch.
+
+**Bad: Unstable props to React.memo component**
+```tsx
+// MemoChild.tsx
+export const MemoChild = memo(({ config }) => <div>...</div>);
+
+// Parent.tsx
+function Parent() {
+  return <MemoChild config={{ theme: 'dark' }} />; // ❌ Breaks memoization!
+}
+```
+
+**Good: Stable props to React.memo component**
+```tsx
+// Parent.tsx
+const CONFIG = { theme: 'dark' };  // Outside component
+
+function Parent() {
+  return <MemoChild config={CONFIG} />; // ✅ Memoization works!
+}
+```
+
+**Bad: useMemo/useCallback with unstable prop dependency**
+```tsx
+function Child({ config }) {  // config comes from parent as unstable prop
+  const value = useMemo(() => expensiveCalc(config), [config]); // ⚠️ May recalculate every render
+}
+```
+
+### no-object-deps
 
 Prevents inline objects/arrays in hook dependency arrays that cause infinite re-render loops.
 
@@ -171,8 +203,8 @@ function Component() {
 
 ### Planned Rules
 
+- **`unstable-props-in-effects`** - Detect unstable props in useEffect/useLayoutEffect (lower severity)
 - **`no-unstable-props`** - Detect inline objects/functions in JSX props
-- **`memo-unstable-props`** - Validate React.memo effectiveness
 - **`exhaustive-deps`** - Comprehensive dependency checking
 - **`require-memo-expensive-component`** - Suggest memoization
 

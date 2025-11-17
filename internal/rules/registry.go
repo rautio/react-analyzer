@@ -15,8 +15,8 @@ func NewRegistry() *Registry {
 	return &Registry{
 		rules: []Rule{
 			&NoObjectDeps{},
-			&MemoizedComponentUnstableProps{}, // Cross-file rule
-			&PlaceholderRule{},                // Demonstration of multiple rules
+			&UnstablePropsToMemo{}, // Detects unstable props to React.memo, useMemo, useCallback
+			&PlaceholderRule{},     // Demonstration of multiple rules
 			// Add new rules here as they're implemented
 		},
 	}
