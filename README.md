@@ -9,9 +9,9 @@ Static analysis tool for detecting React performance issues and anti-patterns th
 React Analyzer catches performance issues before they reach production:
 
 - **Infinite re-render loops** from unstable hook dependencies
-- **Unnecessary re-renders** from inline objects in props
+- **Unnecessary re-renders** from inline objects in props and derived state anti-patterns
 - **Broken memoization** when React.memo components receive unstable props
-- **Missing dependencies** in useEffect, useMemo, and useCallback
+- **Derived state bugs** from useState mirroring props via useEffect
 
 Built with Go and tree-sitter for blazing-fast analysis.
 
@@ -200,6 +200,41 @@ function Component() {
   }, []); // ✅ Runs once
 }
 ```
+
+### no-derived-state
+
+Detects when useState is used to mirror props and sync via useEffect, causing unnecessary re-renders and complexity. This is a common anti-pattern that leads to stale state issues and performance problems.
+
+**Bad: State mirroring props**
+```tsx
+function UserProfile({ user }) {
+  const [name, setName] = useState(user);
+
+  useEffect(() => {
+    setName(user);  // ❌ Causes extra re-render every time user changes
+  }, [user]);
+
+  return <div>{name}</div>;
+}
+```
+
+**Good: Direct derivation**
+```tsx
+function UserProfile({ user }) {
+  const name = user;  // ✅ Simple, performant, no bugs!
+  return <div>{name}</div>;
+}
+```
+
+**Performance Impact:**
+- Each prop change triggers **2 renders** instead of 1 (initial + effect)
+- Adds unnecessary complexity and potential for bugs
+- Can cause stale state issues with multiple prop dependencies
+
+**When to use useState with props:**
+- Initial value only (user controls state after): `useState(initialColor)`
+- Form controls with reset functionality
+- Interactive state that diverges from props
 
 ### Planned Rules
 
