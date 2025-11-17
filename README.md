@@ -283,10 +283,50 @@ function Counter() {
 - useEffect ✓
 - Event handlers ✓
 
+### no-inline-props
+
+Detects when JSX props are set to inline objects, arrays, or functions that are created on every render, causing unnecessary re-renders and breaking memoization.
+
+**Bad:**
+```tsx
+function Parent() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <>
+      <Component config={{ theme: 'dark' }} />      {/* ❌ New object every render */}
+      <List items={[1, 2, 3]} />                    {/* ❌ New array every render */}
+      <Button onClick={() => setCount(count + 1)} /> {/* ❌ New function every render */}
+    </>
+  );
+}
+```
+
+**Good:**
+```tsx
+const CONFIG = { theme: 'dark' };
+const ITEMS = [1, 2, 3];
+
+function Parent() {
+  const [count, setCount] = useState(0);
+
+  const handleClick = useCallback(() => setCount(prev => prev + 1), []);
+
+  return (
+    <>
+      <Component config={CONFIG} />      {/* ✅ Same reference every render */}
+      <List items={ITEMS} />             {/* ✅ Same reference every render */}
+      <Button onClick={handleClick} />   {/* ✅ Same reference every render */}
+    </>
+  );
+}
+```
+
+**Impact:** Inline props break `React.memo` and cause child components to re-render on every parent render, even when props haven't actually changed. This leads to performance degradation that compounds with component depth.
+
 ### Planned Rules
 
 - **`unstable-props-in-effects`** - Detect unstable props in useEffect/useLayoutEffect (lower severity)
-- **`no-unstable-props`** - Detect inline objects/functions in JSX props
 - **`exhaustive-deps`** - Comprehensive dependency checking
 - **`require-memo-expensive-component`** - Suggest memoization
 

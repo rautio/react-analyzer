@@ -24,7 +24,7 @@ func IsUnstableValue(node *parser.Node) bool {
 	}
 
 	// Inline functions: () => {}, function() {}
-	if nodeType == "arrow_function" || nodeType == "function" {
+	if nodeType == "arrow_function" || nodeType == "function" || nodeType == "function_expression" {
 		return true
 	}
 

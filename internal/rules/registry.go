@@ -18,6 +18,7 @@ func NewRegistry() *Registry {
 			&UnstablePropsToMemo{}, // Detects unstable props to React.memo, useMemo, useCallback
 			&NoDerivedState{},      // Detects useState mirroring props via useEffect
 			&NoStaleState{},        // Detects state updates without functional form
+			&NoInlineProps{},       // Detects inline objects/arrays/functions in JSX props
 			&PlaceholderRule{},     // Demonstration of multiple rules
 			// Add new rules here as they're implemented
 		},
