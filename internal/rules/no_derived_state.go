@@ -34,7 +34,7 @@ func (r *NoDerivedState) Check(ast *parser.AST, resolver *analyzer.ModuleResolve
 		}
 
 		// Find all useState declarations in this component
-		states := r.findUseStateDeclarations(node)
+		states := r.findUseStateDeclarations(node, node)
 		if len(states) == 0 {
 			return true // No state, nothing to check
 		}
@@ -57,11 +57,12 @@ func (r *NoDerivedState) Check(ast *parser.AST, resolver *analyzer.ModuleResolve
 
 // StateDeclaration represents a useState call
 type StateDeclaration struct {
-	StateName   string
-	SetterName  string
-	Initializer *parser.Node
-	Line        uint32
-	Column      uint32
+	StateName     string
+	SetterName    string
+	Initializer   *parser.Node
+	ComponentNode *parser.Node // The component this state belongs to
+	Line          uint32
+	Column        uint32
 }
 
 // EffectDeclaration represents a useEffect call
@@ -111,7 +112,7 @@ func (r *NoDerivedState) extractProps(funcNode *parser.Node) []string {
 }
 
 // findUseStateDeclarations finds all useState calls in a component
-func (r *NoDerivedState) findUseStateDeclarations(componentNode *parser.Node) []StateDeclaration {
+func (r *NoDerivedState) findUseStateDeclarations(componentNode *parser.Node, ownerNode *parser.Node) []StateDeclaration {
 	var states []StateDeclaration
 
 	componentNode.Walk(func(node *parser.Node) bool {
@@ -162,11 +163,12 @@ func (r *NoDerivedState) findUseStateDeclarations(componentNode *parser.Node) []
 
 		line, col := node.StartPoint()
 		states = append(states, StateDeclaration{
-			StateName:   stateName,
-			SetterName:  setterName,
-			Initializer: initializer,
-			Line:        line + 1,
-			Column:      col,
+			StateName:     stateName,
+			SetterName:    setterName,
+			Initializer:   initializer,
+			ComponentNode: ownerNode,
+			Line:          line + 1,
+			Column:        col,
 		})
 
 		return true
@@ -268,18 +270,27 @@ func (r *NoDerivedState) findViolations(
 				continue
 			}
 
-			// Check if effect ONLY sets the state (Phase 3 improvement)
-			// For Phase 1, we'll report if we find the pattern
+			// Phase 3: Check if this is the controlled/uncontrolled hybrid pattern
+			// If the setter is used outside the effect (e.g., in event handlers),
+			// this is likely intentional (form control pattern)
+			if r.isSetterUsedOutsideEffect(state.ComponentNode, state.SetterName, effect.Body) {
+				continue // Skip - this is the valid hybrid pattern
+			}
 
 			// Found a violation!
+			// Use the actual initializer expression for the suggestion
+			suggestion := state.Initializer.Text()
+			if suggestion == "" {
+				suggestion = propUsed // Fallback to prop name
+			}
+
 			issues = append(issues, Issue{
 				Rule: r.Name(),
 				Message: fmt.Sprintf(
-					"State '%s' is derived from prop '%s' and causes unnecessary re-renders. Consider: const %s = %s;",
+					"State '%s' mirrors prop and causes unnecessary re-renders. Replace with: const %s = %s;",
 					state.StateName,
-					propUsed,
 					state.StateName,
-					propUsed,
+					suggestion,
 				),
 				FilePath: filePath,
 				Line:     state.Line,
@@ -387,4 +398,54 @@ func (r *NoDerivedState) effectDependsOnProp(deps []string, propName string) boo
 		}
 	}
 	return false
+}
+
+// isSetterUsedOutsideEffect checks if the state setter is called anywhere in the component
+// outside of the specific useEffect. This indicates the controlled/uncontrolled hybrid pattern
+// (e.g., form controls where user can modify state via event handlers)
+func (r *NoDerivedState) isSetterUsedOutsideEffect(componentNode *parser.Node, setterName string, effectBody *parser.Node) bool {
+	if componentNode == nil || effectBody == nil {
+		return false
+	}
+
+	found := false
+	componentNode.Walk(func(node *parser.Node) bool {
+		// Skip if we're inside the effect body
+		if r.isNodeInsideEffect(node, effectBody) {
+			return true // Continue walking but skip this subtree
+		}
+
+		// Look for call_expression
+		if node.Type() == "call_expression" {
+			funcNode := node.ChildByFieldName("function")
+			if funcNode != nil && funcNode.Text() == setterName {
+				found = true
+				return false // Stop walking
+			}
+		}
+		return true
+	})
+
+	return found
+}
+
+// isNodeInsideEffect checks if a node is inside the effect body
+func (r *NoDerivedState) isNodeInsideEffect(node *parser.Node, effectBody *parser.Node) bool {
+	if node == nil || effectBody == nil {
+		return false
+	}
+
+	// Get the position ranges
+	nodeStartRow, nodeStartCol := node.StartPoint()
+	nodeEndRow, nodeEndCol := node.EndPoint()
+	effectStartRow, effectStartCol := effectBody.StartPoint()
+	effectEndRow, effectEndCol := effectBody.EndPoint()
+
+	// Check if node is within effect body bounds
+	// Node starts after effect starts
+	nodeStartsAfter := nodeStartRow > effectStartRow || (nodeStartRow == effectStartRow && nodeStartCol >= effectStartCol)
+	// Node ends before effect ends
+	nodeEndsBefore := nodeEndRow < effectEndRow || (nodeEndRow == effectEndRow && nodeEndCol <= effectEndCol)
+
+	return nodeStartsAfter && nodeEndsBefore
 }
