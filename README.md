@@ -11,6 +11,7 @@ React Analyzer catches performance issues before they reach production:
 - **Infinite re-render loops** from unstable hook dependencies
 - **Unnecessary re-renders** from inline objects in props and derived state anti-patterns
 - **Broken memoization** when React.memo components receive unstable props
+- **Stale closures and race conditions** from non-functional state updates
 - **Derived state bugs** from useState mirroring props via useEffect
 
 Built with Go and tree-sitter for blazing-fast analysis.
@@ -235,6 +236,52 @@ function UserProfile({ user }) {
 - Initial value only (user controls state after): `useState(initialColor)`
 - Form controls with reset functionality
 - Interactive state that diverges from props
+
+### no-stale-state
+
+Prevents stale state bugs by requiring state updates that depend on previous state to use the functional form. This catches race conditions and stale closures in all contexts including async callbacks, timers, and effects.
+
+**Bad: Direct state reference**
+```tsx
+function Counter() {
+  const [count, setCount] = useState(0);
+
+  const increment = () => setCount(count + 1);  // ❌ Stale closure!
+
+  // Especially dangerous in async contexts
+  setTimeout(() => setCount(count + 1), 1000);  // ❌ Will get stuck!
+
+  return <button onClick={increment}>{count}</button>;
+}
+```
+
+**Good: Functional form**
+```tsx
+function Counter() {
+  const [count, setCount] = useState(0);
+
+  const increment = () => setCount(prev => prev + 1);  // ✅ Always correct!
+
+  // Safe in async contexts
+  setTimeout(() => setCount(prev => prev + 1), 1000);  // ✅ Works correctly!
+
+  return <button onClick={increment}>{count}</button>;
+}
+```
+
+**Common Bug Scenarios:**
+- **Timers get stuck:** `setInterval(() => setState(state + 1))` - timer stops at 1
+- **Lost updates:** Multiple rapid clicks only increment by 1 instead of N
+- **Race conditions:** Async operations overwrite each other's updates
+- **Array accumulation fails:** `setItems([...items, x])` loses items with concurrent updates
+
+**All contexts detected:**
+- Regular functions ✓
+- setTimeout/setInterval ✓
+- Promise callbacks ✓
+- async/await ✓
+- useEffect ✓
+- Event handlers ✓
 
 ### Planned Rules
 
