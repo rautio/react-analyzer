@@ -147,7 +147,14 @@ fi
 
 ### unstable-props-to-memo
 
-Detects when unstable props break memoization in React.memo components, useMemo, and useCallback hooks. **Requires cross-file analysis** to detect violations that ESLint cannot catch.
+Detects when unstable props break memoization in React.memo components. **Requires cross-file analysis** to detect violations that ESLint cannot catch.
+
+**✅ Currently Detects:**
+- Unstable props passed to React.memo components (cross-file)
+
+**⏳ Future Detection (TODO):**
+- useMemo with unstable prop dependencies (partially implemented)
+- useCallback with unstable prop dependencies (partially implemented)
 
 **Bad: Unstable props to React.memo component**
 ```tsx
@@ -156,7 +163,7 @@ export const MemoChild = memo(({ config }) => <div>...</div>);
 
 // Parent.tsx
 function Parent() {
-  return <MemoChild config={{ theme: 'dark' }} />; // ❌ Breaks memoization!
+  return <MemoChild config={{ theme: 'dark' }} />; // ❌ Detected! Breaks memoization
 }
 ```
 
@@ -167,13 +174,6 @@ const CONFIG = { theme: 'dark' };  // Outside component
 
 function Parent() {
   return <MemoChild config={CONFIG} />; // ✅ Memoization works!
-}
-```
-
-**Bad: useMemo/useCallback with unstable prop dependency**
-```tsx
-function Child({ config }) {  // config comes from parent as unstable prop
-  const value = useMemo(() => expensiveCalc(config), [config]); // ⚠️ May recalculate every render
 }
 ```
 
