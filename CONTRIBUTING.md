@@ -26,7 +26,7 @@ Thanks for your interest in contributing! This document provides guidelines and 
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-org/react-analyzer
+   git clone https://github.com/rautio/react-analyzer
    cd react-analyzer
    ```
 

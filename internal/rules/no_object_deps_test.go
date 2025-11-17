@@ -29,7 +29,7 @@ func TestNoObjectDeps_ValidDeps(t *testing.T) {
 
 	// Run the rule
 	rule := &NoObjectDeps{}
-	issues := rule.Check(ast)
+	issues := rule.Check(ast, nil)
 
 	// Should have NO issues
 	if len(issues) != 0 {
@@ -61,7 +61,7 @@ func TestNoObjectDeps_ObjectInRender(t *testing.T) {
 
 	// Run the rule
 	rule := &NoObjectDeps{}
-	issues := rule.Check(ast)
+	issues := rule.Check(ast, nil)
 
 	// Expected violations based on the fixture file:
 	// Line 15: config in useEffect deps
@@ -138,7 +138,7 @@ func TestNoObjectDeps_WithHooks(t *testing.T) {
 
 	// Run the rule
 	rule := &NoObjectDeps{}
-	issues := rule.Check(ast)
+	issues := rule.Check(ast, nil)
 
 	// The with-hooks.tsx has:
 	// const config = { theme: 'dark' };

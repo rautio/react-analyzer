@@ -89,7 +89,7 @@ func TestRegistry_RunAll(t *testing.T) {
 	defer ast.Close()
 
 	// Run all rules
-	issues := registry.RunAll(ast)
+	issues := registry.RunAll(ast, nil)
 
 	// Should find at least one issue (from no-object-deps rule)
 	if len(issues) == 0 {
@@ -132,7 +132,7 @@ func TestRegistry_RunAllOnCleanFile(t *testing.T) {
 	defer ast.Close()
 
 	// Run all rules
-	issues := registry.RunAll(ast)
+	issues := registry.RunAll(ast, nil)
 
 	// Should find no issues
 	if len(issues) != 0 {

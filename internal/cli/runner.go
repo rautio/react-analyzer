@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/oskari/react-analyzer/internal/analyzer"
 	"github.com/oskari/react-analyzer/internal/parser"
 	"github.com/oskari/react-analyzer/internal/rules"
 )
@@ -59,6 +60,19 @@ func Run(path string, opts *Options) int {
 	// Create rule registry
 	registry := rules.NewRegistry()
 
+	// Create module resolver for cross-file analysis
+	// Use the provided path as the base directory, or parent directory if it's a file
+	baseDir := path
+	if !info.IsDir() {
+		baseDir = filepath.Dir(path)
+	}
+	resolver, err := analyzer.NewModuleResolver(baseDir)
+	if err != nil {
+		printError(fmt.Errorf("failed to initialize module resolver: %v", err), opts.NoColor)
+		return 2
+	}
+	defer resolver.Close()
+
 	// Print analysis start for directories
 	if len(filesToAnalyze) > 1 && !opts.Quiet {
 		fmt.Printf("Analyzing %d files...\n\n", len(filesToAnalyze))
@@ -78,7 +92,7 @@ func Run(path string, opts *Options) int {
 	filesAnalyzed := 0
 
 	for _, filePath := range filesToAnalyze {
-		issues, err := analyzeFile(filePath, registry, opts)
+		issues, err := analyzeFile(filePath, registry, resolver, opts)
 		if err != nil {
 			// Print error but continue with other files
 			fmt.Fprintf(os.Stderr, "Warning: skipping %s: %v\n", filePath, err)
@@ -112,7 +126,7 @@ func Run(path string, opts *Options) int {
 }
 
 // analyzeFile analyzes a single file and returns issues
-func analyzeFile(filePath string, registry *rules.Registry, opts *Options) ([]rules.Issue, error) {
+func analyzeFile(filePath string, registry *rules.Registry, resolver *analyzer.ModuleResolver, opts *Options) ([]rules.Issue, error) {
 	// Read file content
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -142,7 +156,7 @@ func analyzeFile(filePath string, registry *rules.Registry, opts *Options) ([]ru
 	}
 
 	// Run all registered rules
-	issues := registry.RunAll(ast)
+	issues := registry.RunAll(ast, resolver)
 
 	return issues, nil
 }

@@ -3,6 +3,7 @@ package rules
 import (
 	"fmt"
 
+	"github.com/oskari/react-analyzer/internal/analyzer"
 	"github.com/oskari/react-analyzer/internal/parser"
 )
 
@@ -15,7 +16,7 @@ func (r *NoObjectDeps) Name() string {
 }
 
 // Check analyzes an AST for object/array dependencies in React hooks
-func (r *NoObjectDeps) Check(ast *parser.AST) []Issue {
+func (r *NoObjectDeps) Check(ast *parser.AST, resolver *analyzer.ModuleResolver) []Issue {
 	var issues []Issue
 
 	// Walk the AST to find function declarations (potential React components)

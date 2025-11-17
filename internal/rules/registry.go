@@ -1,6 +1,9 @@
 package rules
 
-import "github.com/oskari/react-analyzer/internal/parser"
+import (
+	"github.com/oskari/react-analyzer/internal/analyzer"
+	"github.com/oskari/react-analyzer/internal/parser"
+)
 
 // Registry holds all available rules
 type Registry struct {
@@ -12,7 +15,8 @@ func NewRegistry() *Registry {
 	return &Registry{
 		rules: []Rule{
 			&NoObjectDeps{},
-			&PlaceholderRule{}, // Demonstration of multiple rules
+			&MemoizedComponentUnstableProps{}, // Cross-file rule
+			&PlaceholderRule{},                // Demonstration of multiple rules
 			// Add new rules here as they're implemented
 		},
 	}
@@ -34,11 +38,11 @@ func (r *Registry) GetRule(name string) (Rule, bool) {
 }
 
 // RunAll runs all registered rules on an AST and returns aggregated issues
-func (r *Registry) RunAll(ast *parser.AST) []Issue {
+func (r *Registry) RunAll(ast *parser.AST, resolver *analyzer.ModuleResolver) []Issue {
 	var allIssues []Issue
 
 	for _, rule := range r.rules {
-		issues := rule.Check(ast)
+		issues := rule.Check(ast, resolver)
 		allIssues = append(allIssues, issues...)
 	}
 

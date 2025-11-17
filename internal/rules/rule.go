@@ -1,6 +1,9 @@
 package rules
 
-import "github.com/oskari/react-analyzer/internal/parser"
+import (
+	"github.com/oskari/react-analyzer/internal/analyzer"
+	"github.com/oskari/react-analyzer/internal/parser"
+)
 
 // Issue represents a single rule violation
 type Issue struct {
@@ -17,5 +20,6 @@ type Rule interface {
 	Name() string
 
 	// Check analyzes an AST and returns any issues found
-	Check(ast *parser.AST) []Issue
+	// The resolver parameter enables cross-file analysis (can be nil for single-file rules)
+	Check(ast *parser.AST, resolver *analyzer.ModuleResolver) []Issue
 }

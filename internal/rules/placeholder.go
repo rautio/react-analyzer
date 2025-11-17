@@ -1,6 +1,9 @@
 package rules
 
-import "github.com/oskari/react-analyzer/internal/parser"
+import (
+	"github.com/oskari/react-analyzer/internal/analyzer"
+	"github.com/oskari/react-analyzer/internal/parser"
+)
 
 // PlaceholderRule is a demonstration rule that doesn't report any issues
 // This shows the registry can handle multiple rules
@@ -12,7 +15,7 @@ func (r *PlaceholderRule) Name() string {
 }
 
 // Check analyzes an AST (currently does nothing)
-func (r *PlaceholderRule) Check(ast *parser.AST) []Issue {
+func (r *PlaceholderRule) Check(ast *parser.AST, resolver *analyzer.ModuleResolver) []Issue {
 	// This is a placeholder - real rules will implement actual checks
 	return nil
 }
