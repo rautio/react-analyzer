@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/oskari/react-analyzer/internal/analyzer"
 	"github.com/oskari/react-analyzer/internal/parser"
@@ -21,8 +22,32 @@ type Options struct {
 	NoColor bool
 }
 
+// AnalysisStats holds metrics about the analysis run
+type AnalysisStats struct {
+	FilesAnalyzed   int
+	FilesWithIssues int
+	FilesClean      int
+	TotalIssues     int
+	Duration        time.Duration
+
+	// Verbose-only stats
+	ParseDuration   time.Duration
+	AnalyzeDuration time.Duration
+	RuleStats       map[string]*RuleStats
+}
+
+// RuleStats holds per-rule execution metrics
+type RuleStats struct {
+	Name        string
+	IssuesFound int
+	Duration    time.Duration
+}
+
 // Run executes the analysis and returns exit code
 func Run(path string, opts *Options) int {
+	// Start timing
+	startTime := time.Now()
+
 	// Check if path exists
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
@@ -86,24 +111,44 @@ func Run(path string, opts *Options) int {
 		fmt.Println()
 	}
 
+	// Initialize stats
+	stats := &AnalysisStats{
+		RuleStats: make(map[string]*RuleStats),
+	}
+
 	// Analyze all files
 	var allIssues []rules.Issue
-	filesWithIssues := 0
-	filesAnalyzed := 0
+	var totalParseDuration time.Duration
+	var totalAnalyzeDuration time.Duration
 
 	for _, filePath := range filesToAnalyze {
-		issues, err := analyzeFile(filePath, registry, resolver, opts)
+		issues, parseDuration, analyzeDuration, err := analyzeFile(filePath, registry, resolver, opts)
 		if err != nil {
 			// Print error but continue with other files
 			fmt.Fprintf(os.Stderr, "Warning: skipping %s: %v\n", filePath, err)
 			continue
 		}
 
-		filesAnalyzed++
+		totalParseDuration += parseDuration
+		totalAnalyzeDuration += analyzeDuration
+
+		stats.FilesAnalyzed++
 		if len(issues) > 0 {
-			filesWithIssues++
+			stats.FilesWithIssues++
 			allIssues = append(allIssues, issues...)
 		}
+	}
+
+	// Collect final stats
+	stats.FilesClean = stats.FilesAnalyzed - stats.FilesWithIssues
+	stats.TotalIssues = len(allIssues)
+	stats.Duration = time.Since(startTime)
+	stats.ParseDuration = totalParseDuration
+	stats.AnalyzeDuration = totalAnalyzeDuration
+
+	// Collect per-rule stats (for verbose mode)
+	if opts.Verbose {
+		collectRuleStats(allIssues, stats)
 	}
 
 	// Display results
@@ -112,40 +157,46 @@ func Run(path string, opts *Options) int {
 			if len(filesToAnalyze) == 1 {
 				printSuccess(fmt.Sprintf("No issues found in %s", filesToAnalyze[0]), opts.NoColor)
 			} else {
-				printSuccess(fmt.Sprintf("No issues found in %d files", filesAnalyzed), opts.NoColor)
+				printSuccess(fmt.Sprintf("No issues found in %d files", stats.FilesAnalyzed), opts.NoColor)
 			}
+		}
+		// Print timing even when no issues (unless quiet)
+		if !opts.Quiet {
+			printTiming(stats, opts)
 		}
 		return 0
 	}
 
 	// Print issues grouped by file
-	printIssuesGrouped(allIssues, filesAnalyzed, filesWithIssues, opts)
+	printIssuesGrouped(allIssues, stats, opts)
 
 	// Return exit code 1 when issues are found
 	return 1
 }
 
-// analyzeFile analyzes a single file and returns issues
-func analyzeFile(filePath string, registry *rules.Registry, resolver *analyzer.ModuleResolver, opts *Options) ([]rules.Issue, error) {
+// analyzeFile analyzes a single file and returns issues with timing metrics
+func analyzeFile(filePath string, registry *rules.Registry, resolver *analyzer.ModuleResolver, opts *Options) ([]rules.Issue, time.Duration, time.Duration, error) {
 	// Read file content
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read file: %v", err)
+		return nil, 0, 0, fmt.Errorf("cannot read file: %v", err)
 	}
 
 	// Create parser
 	p, err := parser.NewParser()
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize parser: %v", err)
+		return nil, 0, 0, fmt.Errorf("failed to initialize parser: %v", err)
 	}
 	defer p.Close()
 
-	// Parse file
+	// Parse file with timing
+	parseStart := time.Now()
 	ast, err := p.ParseFile(filePath, content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse file: %v", err)
+		return nil, 0, 0, fmt.Errorf("failed to parse file: %v", err)
 	}
 	defer ast.Close()
+	parseDuration := time.Since(parseStart)
 
 	// Verbose output for single file analysis
 	if opts.Verbose && len(content) > 0 {
@@ -155,10 +206,12 @@ func analyzeFile(filePath string, registry *rules.Registry, resolver *analyzer.M
 		}
 	}
 
-	// Run all registered rules
+	// Run all registered rules with timing
+	analyzeStart := time.Now()
 	issues := registry.RunAll(ast, resolver)
+	analyzeDuration := time.Since(analyzeStart)
 
-	return issues, nil
+	return issues, parseDuration, analyzeDuration, nil
 }
 
 // findFiles recursively finds all relevant files in a directory
@@ -228,7 +281,7 @@ func printSuccess(message string, noColor bool) {
 }
 
 // printIssuesGrouped formats and prints rule violations grouped by file
-func printIssuesGrouped(issues []rules.Issue, totalFiles, filesWithIssues int, opts *Options) {
+func printIssuesGrouped(issues []rules.Issue, stats *AnalysisStats, opts *Options) {
 	// Group issues by file
 	issuesByFile := make(map[string][]rules.Issue)
 	for _, issue := range issues {
@@ -264,24 +317,28 @@ func printIssuesGrouped(issues []rules.Issue, totalFiles, filesWithIssues int, o
 	}
 
 	fileWord := "file"
-	if filesWithIssues > 1 {
+	if stats.FilesWithIssues > 1 {
 		fileWord = "files"
 	}
 
-	cleanFiles := totalFiles - filesWithIssues
-	summary := fmt.Sprintf("\n✖ Found %d %s in %d %s", len(issues), issueWord, filesWithIssues, fileWord)
-	if cleanFiles > 0 {
+	summary := fmt.Sprintf("\n✖ Found %d %s in %d %s", len(issues), issueWord, stats.FilesWithIssues, fileWord)
+	if stats.FilesClean > 0 {
 		cleanWord := "file"
-		if cleanFiles > 1 {
+		if stats.FilesClean > 1 {
 			cleanWord = "files"
 		}
-		summary += fmt.Sprintf(" (%d %s clean)", cleanFiles, cleanWord)
+		summary += fmt.Sprintf(" (%d %s clean)", stats.FilesClean, cleanWord)
 	}
 
 	if opts.NoColor {
 		fmt.Println(summary)
 	} else {
 		fmt.Printf("\033[31m%s\033[0m\n", summary)
+	}
+
+	// Print timing (default mode)
+	if !opts.Quiet {
+		printTiming(stats, opts)
 	}
 }
 
@@ -295,4 +352,81 @@ func countHooks(ast *parser.AST) int {
 		return true
 	})
 	return count
+}
+
+// printTiming prints basic timing information (default mode)
+func printTiming(stats *AnalysisStats, opts *Options) {
+	fileWord := "file"
+	if stats.FilesAnalyzed != 1 {
+		fileWord = "files"
+	}
+
+	fmt.Printf("Analyzed %d %s in %s\n",
+		stats.FilesAnalyzed,
+		fileWord,
+		formatDuration(stats.Duration))
+
+	// Verbose: Show detailed breakdown
+	if opts.Verbose {
+		printDetailedStats(stats, opts)
+	}
+}
+
+// printDetailedStats prints detailed statistics (verbose mode)
+func printDetailedStats(stats *AnalysisStats, opts *Options) {
+	fmt.Println("\nPerformance Summary:")
+	fmt.Printf("  Time elapsed: %s (parse: %s, analyze: %s)\n",
+		formatDuration(stats.Duration),
+		formatDuration(stats.ParseDuration),
+		formatDuration(stats.AnalyzeDuration))
+
+	if stats.FilesAnalyzed > 0 {
+		filesPerSec := float64(stats.FilesAnalyzed) / stats.Duration.Seconds()
+		fmt.Printf("  Throughput: %.0f files/sec\n", filesPerSec)
+	}
+
+	// Show per-rule stats if available
+	if len(stats.RuleStats) > 0 {
+		fmt.Println("\nRules executed:")
+		for _, ruleStats := range stats.RuleStats {
+			issueWord := "issue"
+			if ruleStats.IssuesFound != 1 {
+				issueWord = "issues"
+			}
+			fmt.Printf("  %s: %d %s\n",
+				ruleStats.Name,
+				ruleStats.IssuesFound,
+				issueWord)
+		}
+	}
+}
+
+// collectRuleStats collects per-rule statistics from issues
+func collectRuleStats(issues []rules.Issue, stats *AnalysisStats) {
+	// Count issues per rule
+	ruleCounts := make(map[string]int)
+	for _, issue := range issues {
+		ruleCounts[issue.Rule]++
+	}
+
+	// Create RuleStats entries
+	for ruleName, count := range ruleCounts {
+		stats.RuleStats[ruleName] = &RuleStats{
+			Name:        ruleName,
+			IssuesFound: count,
+		}
+	}
+}
+
+// formatDuration formats a duration in a human-readable way
+func formatDuration(d time.Duration) string {
+	if d < time.Microsecond {
+		return fmt.Sprintf("%dns", d.Nanoseconds())
+	} else if d < time.Millisecond {
+		return fmt.Sprintf("%.0fμs", float64(d.Microseconds()))
+	} else if d < time.Second {
+		return fmt.Sprintf("%.0fms", float64(d.Milliseconds()))
+	} else {
+		return fmt.Sprintf("%.2fs", d.Seconds())
+	}
 }

@@ -38,14 +38,16 @@ react-analyzer src/App.tsx
 **Output:**
 ```
 ✓ No issues found in src/App.tsx
+Analyzed 1 file in 12ms
 ```
 
 If issues are found:
 ```
 src/Dashboard.tsx
-  12:5  error  Inline object in hook dependency array will cause infinite re-renders  no-object-deps
+  12:5 - [no-object-deps] Inline object in hook dependency array will cause infinite re-renders
 
-✖ 1 error
+✖ Found 1 issue in 1 file
+Analyzed 1 file in 15ms
 ```
 
 ## Usage
@@ -62,25 +64,64 @@ react-analyzer [options] <file>
 |--------|-------|-------------|
 | `--help` | `-h` | Show help message |
 | `--version` | `-v` | Show version number |
-| `--verbose` | `-V` | Show detailed analysis output |
-| `--quiet` | `-q` | Only show errors (suppress success messages) |
+| `--verbose` | `-V` | Show detailed analysis output and performance metrics |
+| `--quiet` | `-q` | Only show errors (suppress success messages and timing) |
 | `--no-color` | | Disable colored output (useful for CI) |
 
 ### Examples
 
-**Detailed output:**
+**Analyze a directory:**
 ```bash
-react-analyzer --verbose src/components/Dashboard.tsx
+react-analyzer src/components/
+```
+Output:
+```
+Analyzing 7 files...
+
+src/components/Dashboard.tsx
+  12:5 - [no-object-deps] Dependency 'config' is an object/array created in render
+
+✖ Found 1 issue in 1 file (6 files clean)
+Analyzed 7 files in 45ms
+```
+
+**Verbose mode (detailed metrics):**
+```bash
+react-analyzer --verbose src/components/
+```
+Output includes performance breakdown:
+```
+Analyzing 7 files...
+
+Rules enabled: 3
+  - no-object-deps
+  - memoized-component-unstable-props
+  - placeholder
+
+... (issues) ...
+
+✖ Found 1 issue in 1 file (6 files clean)
+Analyzed 7 files in 45ms
+
+Performance Summary:
+  Time elapsed: 45ms (parse: 15ms, analyze: 28ms)
+  Throughput: 156 files/sec
+
+Rules executed:
+  no-object-deps: 1 issue
+  memoized-component-unstable-props: 0 issues
+  placeholder: 0 issues
 ```
 
 **Quiet mode (errors only):**
 ```bash
 react-analyzer --quiet src/App.tsx
 ```
+Only shows issues if found, no success message or timing.
 
 **CI/CD integration:**
 ```bash
-react-analyzer --no-color src/App.tsx
+react-analyzer --no-color src/
 if [ $? -ne 0 ]; then
   echo "React analysis failed"
   exit 1
