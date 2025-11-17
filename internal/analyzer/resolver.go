@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/oskari/react-analyzer/internal/parser"
+	"github.com/rautio/react-analyzer/internal/parser"
 )
 
 // ModuleResolver resolves import paths and manages parsed modules

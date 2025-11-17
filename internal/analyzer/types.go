@@ -1,6 +1,6 @@
 package analyzer
 
-import "github.com/oskari/react-analyzer/internal/parser"
+import "github.com/rautio/react-analyzer/internal/parser"
 
 // Import represents an import statement
 type Import struct {

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/oskari/react-analyzer/internal/analyzer"
-	"github.com/oskari/react-analyzer/internal/parser"
-	"github.com/oskari/react-analyzer/internal/rules"
+	"github.com/rautio/react-analyzer/internal/analyzer"
+	"github.com/rautio/react-analyzer/internal/parser"
+	"github.com/rautio/react-analyzer/internal/rules"
 )
 
 // validExtensions are the file extensions we analyze

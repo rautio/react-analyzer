@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oskari/react-analyzer/internal/parser"
+	"github.com/rautio/react-analyzer/internal/parser"
 )
 
 func TestNoObjectDeps_ValidDeps(t *testing.T) {

@@ -1,7 +1,7 @@
 package analyzer
 
 import (
-	"github.com/oskari/react-analyzer/internal/parser"
+	"github.com/rautio/react-analyzer/internal/parser"
 )
 
 // ExtractImports finds all import statements in an AST

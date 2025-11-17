@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/oskari/react-analyzer/internal/analyzer"
-	"github.com/oskari/react-analyzer/internal/parser"
+	"github.com/rautio/react-analyzer/internal/analyzer"
+	"github.com/rautio/react-analyzer/internal/parser"
 )
 
 func TestMemoizedComponentUnstableProps_WithViolations(t *testing.T) {

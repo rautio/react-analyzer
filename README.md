@@ -20,7 +20,7 @@ Built with Go and tree-sitter for blazing-fast analysis.
 Currently requires building from source:
 
 ```bash
-git clone https://github.com/your-org/react-analyzer
+git clone https://github.com/rautio/react-analyzer
 cd react-analyzer
 go build -o react-analyzer ./cmd/react-analyzer
 ```

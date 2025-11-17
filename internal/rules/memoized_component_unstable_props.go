@@ -3,8 +3,8 @@ package rules
 import (
 	"fmt"
 
-	"github.com/oskari/react-analyzer/internal/analyzer"
-	"github.com/oskari/react-analyzer/internal/parser"
+	"github.com/rautio/react-analyzer/internal/analyzer"
+	"github.com/rautio/react-analyzer/internal/parser"
 )
 
 // MemoizedComponentUnstableProps detects when a parent passes unstable props to a memoized child component

@@ -240,7 +240,7 @@ jobs:
 
       - name: Install react-analyzer
         run: |
-          curl -L https://github.com/your-org/react-analyzer/releases/latest/download/react-analyzer-linux-amd64 -o react-analyzer
+          curl -L https://github.com/rautio/react-analyzer/releases/latest/download/react-analyzer-linux-amd64 -o react-analyzer
           chmod +x react-analyzer
 
       - name: Analyze components
@@ -344,7 +344,7 @@ EXIT CODES:
     1    Issues found
     2    Analysis error
 
-For more information, visit: https://github.com/your-org/react-analyzer
+For more information, visit: https://github.com/rautio/react-analyzer
 ```
 
 ### `react-analyzer --version`
@@ -366,8 +366,8 @@ import (
     "fmt"
     "os"
 
-    "github.com/your-org/react-analyzer/internal/analyzer"
-    "github.com/your-org/react-analyzer/internal/cli"
+    "github.com/rautio/react-analyzer/internal/analyzer"
+    "github.com/rautio/react-analyzer/internal/cli"
 )
 
 func main() {
@@ -520,7 +520,7 @@ var ErrorMessages = map[string]string{
 
     "read_error": "Cannot read file: %s\n%s",
 
-    "internal_error": "Internal error: %s\nThis is a bug. Please report it at:\nhttps://github.com/your-org/react-analyzer/issues",
+    "internal_error": "Internal error: %s\nThis is a bug. Please report it at:\nhttps://github.com/rautio/react-analyzer/issues",
 }
 
 func FormatError(errorType string, args ...interface{}) string {
@@ -711,14 +711,14 @@ react-analyzer-v0.1.0-windows-amd64.exe  # Windows
 brew install react-analyzer
 
 # Linux (curl)
-curl -L https://github.com/your-org/react-analyzer/releases/latest/download/react-analyzer-linux-amd64 -o /usr/local/bin/react-analyzer
+curl -L https://github.com/rautio/react-analyzer/releases/latest/download/react-analyzer-linux-amd64 -o /usr/local/bin/react-analyzer
 chmod +x /usr/local/bin/react-analyzer
 
 # Windows (Chocolatey - future)
 choco install react-analyzer
 
 # Go get (for development)
-go install github.com/your-org/react-analyzer@latest
+go install github.com/rautio/react-analyzer@latest
 ```
 
 ---

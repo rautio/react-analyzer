@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/oskari/react-analyzer/internal/parser"
+	"github.com/rautio/react-analyzer/internal/parser"
 )
 
 func TestNewRegistry(t *testing.T) {

@@ -3,7 +3,7 @@ package analyzer
 import (
 	"strings"
 
-	"github.com/oskari/react-analyzer/internal/parser"
+	"github.com/rautio/react-analyzer/internal/parser"
 )
 
 // AnalyzeSymbols extracts symbols from a module's AST

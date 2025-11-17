@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/oskari/react-analyzer/internal/cli"
+	"github.com/rautio/react-analyzer/internal/cli"
 )
 
 const Version = "0.1.0"

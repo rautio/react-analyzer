@@ -1,8 +1,8 @@
 package rules
 
 import (
-	"github.com/oskari/react-analyzer/internal/analyzer"
-	"github.com/oskari/react-analyzer/internal/parser"
+	"github.com/rautio/react-analyzer/internal/analyzer"
+	"github.com/rautio/react-analyzer/internal/parser"
 )
 
 // PlaceholderRule is a demonstration rule that doesn't report any issues

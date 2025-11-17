@@ -39,7 +39,7 @@ EXIT CODES:
     1    Issues found
     2    Analysis error
 
-For more information, visit: https://github.com/your-org/react-analyzer
+For more information, visit: https://github.com/rautio/react-analyzer
 `
 	fmt.Fprint(w, help)
 }

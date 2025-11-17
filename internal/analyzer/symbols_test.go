@@ -3,7 +3,7 @@ package analyzer
 import (
 	"testing"
 
-	"github.com/oskari/react-analyzer/internal/parser"
+	"github.com/rautio/react-analyzer/internal/parser"
 )
 
 func TestAnalyzeSymbols_ReactMemo(t *testing.T) {
