@@ -173,3 +173,75 @@ func TestNoDerivedState_NoViolations(t *testing.T) {
 		}
 	}
 }
+
+func TestNoDerivedState_AdvancedCases(t *testing.T) {
+	// Get absolute path to fixtures
+	fixturesDir, err := filepath.Abs("../../test/fixtures")
+	if err != nil {
+		t.Fatalf("Failed to get fixtures directory: %v", err)
+	}
+
+	testFile := filepath.Join(fixturesDir, "derived-state-advanced.tsx")
+	content, err := os.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("Failed to read test file: %v", err)
+	}
+
+	// Create parser
+	p, err := parser.NewParser()
+	if err != nil {
+		t.Fatalf("Failed to create parser: %v", err)
+	}
+	defer p.Close()
+
+	// Parse the file
+	ast, err := p.ParseFile(testFile, content)
+	if err != nil {
+		t.Fatalf("Failed to parse file: %v", err)
+	}
+	defer ast.Close()
+
+	// Create module resolver
+	resolver, err := analyzer.NewModuleResolver(fixturesDir)
+	if err != nil {
+		t.Fatalf("Failed to create resolver: %v", err)
+	}
+	defer resolver.Close()
+
+	// Run the rule
+	rule := &NoDerivedState{}
+	issues := rule.Check(ast, resolver)
+
+	// Should find violations in:
+	// - NestedProperty (user.name)
+	// - DeepNested (data.settings.theme.color)
+	// - ComputedValue (items.length)
+	// - FunctionCall (calculateTotal(items))
+	// - TemplateLiteral (`Hello, ${name}`)
+	// Total: At least 5 violations expected
+	expectedMin := 5
+	if len(issues) < expectedMin {
+		t.Errorf("Expected at least %d issues, found %d", expectedMin, len(issues))
+		for _, issue := range issues {
+			t.Logf("  Line %d: %s", issue.Line, issue.Message)
+		}
+	} else {
+		t.Logf("Successfully detected %d violations in advanced cases:", len(issues))
+		for _, issue := range issues {
+			t.Logf("  Line %d: %s", issue.Line, issue.Message)
+		}
+	}
+
+	// Verify issues have correct fields
+	for _, issue := range issues {
+		if issue.Rule != "no-derived-state" {
+			t.Errorf("Expected rule 'no-derived-state', got '%s'", issue.Rule)
+		}
+		if issue.Message == "" {
+			t.Error("Expected non-empty message")
+		}
+		if issue.Line == 0 {
+			t.Error("Expected non-zero line number")
+		}
+	}
+}

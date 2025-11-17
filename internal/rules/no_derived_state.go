@@ -263,8 +263,8 @@ func (r *NoDerivedState) findViolations(
 				continue
 			}
 
-			// Check if effect depends on the prop
-			if !contains(effect.Deps, propUsed) {
+			// Check if effect depends on the prop or any nested property
+			if !r.effectDependsOnProp(effect.Deps, propUsed) {
 				continue
 			}
 
@@ -307,7 +307,36 @@ func (r *NoDerivedState) initializerUsesProps(initializer *parser.Node, props []
 		}
 	}
 
-	// Phase 2 will handle: user.name, calc(items), etc.
+	// Phase 2: Nested properties and computed values
+	// Check if any child identifier references a prop
+	propUsed := r.findPropInExpression(initializer, props)
+	if propUsed != "" {
+		return propUsed
+	}
+
+	return ""
+}
+
+// findPropInExpression recursively searches for prop references in complex expressions
+func (r *NoDerivedState) findPropInExpression(node *parser.Node, props []string) string {
+	if node == nil {
+		return ""
+	}
+
+	// Check current node
+	if node.Type() == "identifier" {
+		text := node.Text()
+		if contains(props, text) {
+			return text
+		}
+	}
+
+	// Recursively check children
+	for _, child := range node.NamedChildren() {
+		if propUsed := r.findPropInExpression(child, props); propUsed != "" {
+			return propUsed
+		}
+	}
 
 	return ""
 }
@@ -338,6 +367,22 @@ func (r *NoDerivedState) effectCallsSetter(body *parser.Node, setterName string)
 func contains(slice []string, value string) bool {
 	for _, item := range slice {
 		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
+// effectDependsOnProp checks if the effect depends on the prop or any nested property
+// e.g., prop "user" matches dependencies ["user"], ["user.name"], ["user.age.value"]
+func (r *NoDerivedState) effectDependsOnProp(deps []string, propName string) bool {
+	for _, dep := range deps {
+		// Exact match: user === user
+		if dep == propName {
+			return true
+		}
+		// Nested property: user.name starts with "user."
+		if len(dep) > len(propName) && dep[:len(propName)] == propName && dep[len(propName)] == '.' {
 			return true
 		}
 	}
