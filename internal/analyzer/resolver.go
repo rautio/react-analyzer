@@ -12,12 +12,13 @@ import (
 
 // ModuleResolver resolves import paths and manages parsed modules
 type ModuleResolver struct {
-	modules  map[string]*Module // Cache of parsed modules (key: absolute path)
-	mu       sync.RWMutex       // Protects modules map for concurrent access
-	parserMu sync.Mutex         // Protects parser (tree-sitter is not thread-safe)
-	baseDir  string             // Project root directory
-	parser   *parser.TreeSitterParser
-	aliases  map[string]string // Path aliases: "@/" -> "/absolute/path/to/src/"
+	modules      map[string]*Module // Cache of parsed modules (key: absolute path)
+	mu           sync.RWMutex       // Protects modules map for concurrent access
+	parserMu     sync.Mutex         // Protects parser (tree-sitter is not thread-safe)
+	baseDir      string             // Project root directory
+	parser       *parser.TreeSitterParser
+	aliasCache   map[string]map[string]string // Per-directory alias cache: dir -> aliases
+	aliasCacheMu sync.RWMutex                 // Protects aliasCache for concurrent access
 }
 
 // NewModuleResolver creates a new module resolver
@@ -32,18 +33,11 @@ func NewModuleResolver(baseDir string) (*ModuleResolver, error) {
 		return nil, err
 	}
 
-	// Load path aliases from config files (tsconfig.json, .reactanalyzer.json)
-	aliases, err := LoadPathAliases(absBase)
-	if err != nil {
-		// Config loading is optional - continue without aliases if it fails
-		aliases = make(map[string]string)
-	}
-
 	return &ModuleResolver{
-		modules: make(map[string]*Module),
-		baseDir: absBase,
-		parser:  p,
-		aliases: aliases,
+		modules:    make(map[string]*Module),
+		baseDir:    absBase,
+		parser:     p,
+		aliasCache: make(map[string]map[string]string),
 	}, nil
 }
 
@@ -52,14 +46,104 @@ func (r *ModuleResolver) Close() error {
 	return r.parser.Close()
 }
 
+// getOrLoadAliasesForFile returns the path aliases for a given file
+// Uses nearest config file (walks up directory tree) with caching
+func (r *ModuleResolver) getOrLoadAliasesForFile(filePath string) map[string]string {
+	dir := filepath.Dir(filePath)
+
+	// Fast path: check cache with read lock
+	r.aliasCacheMu.RLock()
+	if aliases, ok := r.aliasCache[dir]; ok {
+		r.aliasCacheMu.RUnlock()
+		return aliases
+	}
+	r.aliasCacheMu.RUnlock()
+
+	// Slow path: find and load nearest config
+	configDir := r.findNearestConfigDir(dir)
+
+	var aliases map[string]string
+	if configDir != "" {
+		// Check if we already loaded this config directory
+		r.aliasCacheMu.RLock()
+		if cachedAliases, ok := r.aliasCache[configDir]; ok {
+			r.aliasCacheMu.RUnlock()
+			// Cache for the current directory too
+			r.aliasCacheMu.Lock()
+			r.aliasCache[dir] = cachedAliases
+			r.aliasCacheMu.Unlock()
+			return cachedAliases
+		}
+		r.aliasCacheMu.RUnlock()
+
+		// Load aliases for this config directory
+		aliases, _ = LoadPathAliases(configDir)
+	}
+
+	if aliases == nil {
+		aliases = make(map[string]string)
+	}
+
+	// Cache the result (even if empty)
+	r.aliasCacheMu.Lock()
+	r.aliasCache[dir] = aliases
+	if configDir != "" && configDir != dir {
+		// Also cache for the config directory itself
+		r.aliasCache[configDir] = aliases
+	}
+	r.aliasCacheMu.Unlock()
+
+	return aliases
+}
+
+// findNearestConfigDir walks up the directory tree to find the nearest config file
+// Returns the directory containing the config, or empty string if not found
+func (r *ModuleResolver) findNearestConfigDir(startDir string) string {
+	dir := startDir
+
+	for {
+		// Check for .reactanalyzer.json (higher priority)
+		reactConfigPath := filepath.Join(dir, ".reactanalyzer.json")
+		if _, err := os.Stat(reactConfigPath); err == nil {
+			return dir
+		}
+
+		// Check for tsconfig.json
+		tsconfigPath := filepath.Join(dir, "tsconfig.json")
+		if _, err := os.Stat(tsconfigPath); err == nil {
+			return dir
+		}
+
+		// Stop at baseDir (project root)
+		if dir == r.baseDir {
+			break
+		}
+
+		// Move up one directory
+		parent := filepath.Dir(dir)
+
+		// Stop at filesystem root
+		if parent == dir {
+			break
+		}
+
+		dir = parent
+	}
+
+	return ""
+}
+
 // Resolve converts an import path to an absolute file path
 func (r *ModuleResolver) Resolve(fromFile string, importPath string) (string, error) {
 	var targetPath string
 
 	// Try alias resolution first for non-relative imports
 	if !strings.HasPrefix(importPath, ".") {
+		// Get aliases for the source file (uses nearest config with caching)
+		aliases := r.getOrLoadAliasesForFile(fromFile)
+
 		// Check if this matches any alias
-		if aliasPrefix, aliasTarget, ok := FindLongestMatchingAlias(importPath, r.aliases); ok {
+		if aliasPrefix, aliasTarget, ok := FindLongestMatchingAlias(importPath, aliases); ok {
 			// Replace alias prefix with target path
 			relativePath := strings.TrimPrefix(importPath, aliasPrefix)
 			targetPath = filepath.Join(aliasTarget, relativePath)

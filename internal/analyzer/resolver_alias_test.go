@@ -66,16 +66,6 @@ function App() {
 	}
 	defer resolver.Close()
 
-	// Verify aliases were loaded
-	if len(resolver.aliases) == 0 {
-		t.Fatal("Expected aliases to be loaded from tsconfig.json")
-	}
-
-	t.Logf("Loaded %d aliases", len(resolver.aliases))
-	for prefix, target := range resolver.aliases {
-		t.Logf("  %s -> %s", prefix, target)
-	}
-
 	// Test resolving @components/Button
 	resolved, err := resolver.Resolve(appPath, "@components/Button")
 	if err != nil {
@@ -201,5 +191,179 @@ func TestModuleResolver_ReactAnalyzerConfigOverride(t *testing.T) {
 	} else {
 		t.Logf("✓ .reactanalyzer.json correctly overrode tsconfig.json")
 		t.Logf("  Resolved @/utils -> %s", resolved)
+	}
+}
+
+func TestModuleResolver_MonorepoSupport(t *testing.T) {
+	// Create temporary monorepo structure:
+	// /
+	//   packages/
+	//     package-a/
+	//       tsconfig.json (aliases: @pkgA/* -> src/*)
+	//       src/
+	//         utils.ts
+	//         App.tsx (imports @pkgA/utils)
+	//         nested/
+	//           Component.tsx (imports @pkgA/utils)
+	//     package-b/
+	//       .reactanalyzer.json (aliases: @pkgB/* -> lib/*)
+	//       lib/
+	//         helpers.ts
+	//       Main.tsx (imports @pkgB/helpers)
+
+	tmpDir := t.TempDir()
+
+	// Create package-a structure
+	pkgADir := filepath.Join(tmpDir, "packages", "package-a")
+	pkgASrcDir := filepath.Join(pkgADir, "src")
+	pkgANestedDir := filepath.Join(pkgASrcDir, "nested")
+	if err := os.MkdirAll(pkgANestedDir, 0755); err != nil {
+		t.Fatalf("Failed to create package-a directories: %v", err)
+	}
+
+	// Create package-a tsconfig.json
+	pkgATsconfig := `{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@pkgA/*": ["src/*"]
+    }
+  }
+}`
+	pkgATsconfigPath := filepath.Join(pkgADir, "tsconfig.json")
+	if err := os.WriteFile(pkgATsconfigPath, []byte(pkgATsconfig), 0644); err != nil {
+		t.Fatalf("Failed to write package-a tsconfig.json: %v", err)
+	}
+
+	// Create package-a files
+	pkgAUtilsContent := `export const helperA = () => 'A';`
+	pkgAUtilsPath := filepath.Join(pkgASrcDir, "utils.ts")
+	if err := os.WriteFile(pkgAUtilsPath, []byte(pkgAUtilsContent), 0644); err != nil {
+		t.Fatalf("Failed to write package-a utils.ts: %v", err)
+	}
+
+	pkgAAppContent := `import { helperA } from '@pkgA/utils';`
+	pkgAAppPath := filepath.Join(pkgASrcDir, "App.tsx")
+	if err := os.WriteFile(pkgAAppPath, []byte(pkgAAppContent), 0644); err != nil {
+		t.Fatalf("Failed to write package-a App.tsx: %v", err)
+	}
+
+	pkgAComponentContent := `import { helperA } from '@pkgA/utils';`
+	pkgAComponentPath := filepath.Join(pkgANestedDir, "Component.tsx")
+	if err := os.WriteFile(pkgAComponentPath, []byte(pkgAComponentContent), 0644); err != nil {
+		t.Fatalf("Failed to write package-a Component.tsx: %v", err)
+	}
+
+	// Create package-b structure
+	pkgBDir := filepath.Join(tmpDir, "packages", "package-b")
+	pkgBLibDir := filepath.Join(pkgBDir, "lib")
+	if err := os.MkdirAll(pkgBLibDir, 0755); err != nil {
+		t.Fatalf("Failed to create package-b directories: %v", err)
+	}
+
+	// Create package-b .reactanalyzer.json
+	pkgBConfig := `{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@pkgB/*": ["lib/*"]
+    }
+  }
+}`
+	pkgBConfigPath := filepath.Join(pkgBDir, ".reactanalyzer.json")
+	if err := os.WriteFile(pkgBConfigPath, []byte(pkgBConfig), 0644); err != nil {
+		t.Fatalf("Failed to write package-b .reactanalyzer.json: %v", err)
+	}
+
+	// Create package-b files
+	pkgBHelpersContent := `export const helperB = () => 'B';`
+	pkgBHelpersPath := filepath.Join(pkgBLibDir, "helpers.ts")
+	if err := os.WriteFile(pkgBHelpersPath, []byte(pkgBHelpersContent), 0644); err != nil {
+		t.Fatalf("Failed to write package-b helpers.ts: %v", err)
+	}
+
+	pkgBMainContent := `import { helperB } from '@pkgB/helpers';`
+	pkgBMainPath := filepath.Join(pkgBDir, "Main.tsx")
+	if err := os.WriteFile(pkgBMainPath, []byte(pkgBMainContent), 0644); err != nil {
+		t.Fatalf("Failed to write package-b Main.tsx: %v", err)
+	}
+
+	// Create resolver with monorepo root
+	resolver, err := NewModuleResolver(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create resolver: %v", err)
+	}
+	defer resolver.Close()
+
+	// Test 1: Resolve @pkgA/utils from package-a App.tsx
+	t.Log("Test 1: Resolve @pkgA/utils from package-a/src/App.tsx")
+	resolved, err := resolver.Resolve(pkgAAppPath, "@pkgA/utils")
+	if err != nil {
+		t.Errorf("Failed to resolve @pkgA/utils from package-a: %v", err)
+	} else {
+		expectedPath, _ := filepath.Abs(pkgAUtilsPath)
+		if resolved != expectedPath {
+			t.Errorf("Package-a: Expected %s, got %s", expectedPath, resolved)
+		} else {
+			t.Logf("✓ Package-a resolved @pkgA/utils -> %s", resolved)
+		}
+	}
+
+	// Test 2: Resolve @pkgA/utils from package-a nested Component.tsx (test caching)
+	t.Log("Test 2: Resolve @pkgA/utils from package-a/src/nested/Component.tsx (caching test)")
+	resolved, err = resolver.Resolve(pkgAComponentPath, "@pkgA/utils")
+	if err != nil {
+		t.Errorf("Failed to resolve @pkgA/utils from package-a nested: %v", err)
+	} else {
+		expectedPath, _ := filepath.Abs(pkgAUtilsPath)
+		if resolved != expectedPath {
+			t.Errorf("Package-a nested: Expected %s, got %s", expectedPath, resolved)
+		} else {
+			t.Logf("✓ Package-a nested resolved @pkgA/utils -> %s", resolved)
+		}
+	}
+
+	// Test 3: Resolve @pkgB/helpers from package-b Main.tsx
+	t.Log("Test 3: Resolve @pkgB/helpers from package-b/Main.tsx")
+	resolved, err = resolver.Resolve(pkgBMainPath, "@pkgB/helpers")
+	if err != nil {
+		t.Errorf("Failed to resolve @pkgB/helpers from package-b: %v", err)
+	} else {
+		expectedPath, _ := filepath.Abs(pkgBHelpersPath)
+		if resolved != expectedPath {
+			t.Errorf("Package-b: Expected %s, got %s", expectedPath, resolved)
+		} else {
+			t.Logf("✓ Package-b resolved @pkgB/helpers -> %s", resolved)
+		}
+	}
+
+	// Test 4: Verify package-a can't resolve package-b aliases
+	t.Log("Test 4: Verify package-a cannot resolve package-b aliases")
+	_, err = resolver.Resolve(pkgAAppPath, "@pkgB/helpers")
+	if err == nil {
+		t.Error("Expected package-a to fail resolving package-b alias @pkgB/helpers")
+	} else {
+		t.Logf("✓ Correctly rejected cross-package alias: %v", err)
+	}
+
+	// Test 5: Verify package-b can't resolve package-a aliases
+	t.Log("Test 5: Verify package-b cannot resolve package-a aliases")
+	_, err = resolver.Resolve(pkgBMainPath, "@pkgA/utils")
+	if err == nil {
+		t.Error("Expected package-b to fail resolving package-a alias @pkgA/utils")
+	} else {
+		t.Logf("✓ Correctly rejected cross-package alias: %v", err)
+	}
+
+	// Test 6: Verify cache is being used (check internal state)
+	t.Log("Test 6: Verify alias cache has entries for all accessed directories")
+	resolver.aliasCacheMu.RLock()
+	cacheSize := len(resolver.aliasCache)
+	resolver.aliasCacheMu.RUnlock()
+
+	if cacheSize < 3 {
+		t.Errorf("Expected at least 3 cache entries (package-a dir, package-a src, package-b dir), got %d", cacheSize)
+	} else {
+		t.Logf("✓ Alias cache has %d entries (proper caching)", cacheSize)
 	}
 }
