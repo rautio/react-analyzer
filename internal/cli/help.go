@@ -23,6 +23,7 @@ OPTIONS:
     -V, --verbose      Show detailed output
     -q, --quiet        Only show errors
         --no-color     Disable colored output
+    -j, --workers N    Number of parallel workers (default: auto-detect CPUs, 1 = sequential)
 
 EXAMPLES:
     react-analyzer src/App.tsx              # Analyze single file

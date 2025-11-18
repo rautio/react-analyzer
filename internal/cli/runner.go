@@ -20,6 +20,7 @@ type Options struct {
 	Verbose bool
 	Quiet   bool
 	NoColor bool
+	Workers int // Number of parallel workers (0 = auto-detect CPUs, 1 = sequential)
 }
 
 // AnalysisStats holds metrics about the analysis run
@@ -116,26 +117,27 @@ func Run(path string, opts *Options) int {
 		RuleStats: make(map[string]*RuleStats),
 	}
 
-	// Analyze all files
-	var allIssues []rules.Issue
-	var totalParseDuration time.Duration
-	var totalAnalyzeDuration time.Duration
+	// Analyze all files using worker pool (handles both sequential and parallel)
+	fileResults, totalParseDuration, totalAnalyzeDuration := analyzeFiles(
+		filesToAnalyze,
+		registry,
+		resolver,
+		opts,
+	)
 
-	for _, filePath := range filesToAnalyze {
-		issues, parseDuration, analyzeDuration, err := analyzeFile(filePath, registry, resolver, opts)
-		if err != nil {
+	// Process results
+	var allIssues []rules.Issue
+	for _, result := range fileResults {
+		if result.Error != nil {
 			// Print error but continue with other files
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s: %v\n", filePath, err)
+			fmt.Fprintf(os.Stderr, "Warning: skipping %s: %v\n", result.FilePath, result.Error)
 			continue
 		}
 
-		totalParseDuration += parseDuration
-		totalAnalyzeDuration += analyzeDuration
-
 		stats.FilesAnalyzed++
-		if len(issues) > 0 {
+		if len(result.Issues) > 0 {
 			stats.FilesWithIssues++
-			allIssues = append(allIssues, issues...)
+			allIssues = append(allIssues, result.Issues...)
 		}
 	}
 

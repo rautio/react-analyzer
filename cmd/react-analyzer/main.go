@@ -26,6 +26,9 @@ func main() {
 
 	noColor := flag.Bool("no-color", false, "")
 
+	workers := flag.Int("workers", 0, "")
+	flag.IntVar(workers, "j", 0, "")
+
 	// Custom usage (will show our help text)
 	flag.Usage = func() {
 		cli.PrintHelp(os.Stdout)
@@ -59,6 +62,7 @@ func main() {
 		Verbose: *verbose,
 		Quiet:   *quiet,
 		NoColor: *noColor,
+		Workers: *workers,
 	}
 
 	// Run analysis and exit with appropriate code

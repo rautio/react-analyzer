@@ -5,15 +5,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/rautio/react-analyzer/internal/parser"
 )
 
 // ModuleResolver resolves import paths and manages parsed modules
 type ModuleResolver struct {
-	modules map[string]*Module // Cache of parsed modules (key: absolute path)
-	baseDir string             // Project root directory
-	parser  *parser.TreeSitterParser
+	modules  map[string]*Module // Cache of parsed modules (key: absolute path)
+	mu       sync.RWMutex       // Protects modules map for concurrent access
+	parserMu sync.Mutex         // Protects parser (tree-sitter is not thread-safe)
+	baseDir  string             // Project root directory
+	parser   *parser.TreeSitterParser
 }
 
 // NewModuleResolver creates a new module resolver
@@ -82,6 +85,7 @@ func (r *ModuleResolver) Resolve(fromFile string, importPath string) (string, er
 }
 
 // GetModule returns a module, parsing it if necessary
+// Thread-safe: uses read lock for cache lookup, write lock for cache update
 func (r *ModuleResolver) GetModule(filePath string) (*Module, error) {
 	// Normalize path
 	absPath, err := filepath.Abs(filePath)
@@ -89,18 +93,25 @@ func (r *ModuleResolver) GetModule(filePath string) (*Module, error) {
 		return nil, err
 	}
 
-	// Check cache
+	// Check cache with read lock (allows concurrent reads)
+	r.mu.RLock()
 	if mod, exists := r.modules[absPath]; exists {
+		r.mu.RUnlock()
 		return mod, nil
 	}
+	r.mu.RUnlock()
 
-	// Parse the module
+	// Read file content
 	content, err := os.ReadFile(absPath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read %s: %v", absPath, err)
 	}
 
+	// Parse with mutex protection (tree-sitter parser is not thread-safe)
+	r.parserMu.Lock()
 	ast, err := r.parser.ParseFile(absPath, content)
+	r.parserMu.Unlock()
+
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse %s: %v", absPath, err)
 	}
@@ -116,13 +127,29 @@ func (r *ModuleResolver) GetModule(filePath string) (*Module, error) {
 		Symbols:  make(map[string]*Symbol),
 	}
 
-	// Cache it
+	// Cache it with write lock
+	r.mu.Lock()
+	// Double-check: another goroutine might have cached it while we were parsing
+	if existing, exists := r.modules[absPath]; exists {
+		r.mu.Unlock()
+		return existing, nil
+	}
 	r.modules[absPath] = module
+	r.mu.Unlock()
 
 	return module, nil
 }
 
 // GetModules returns all cached modules
+// Thread-safe: returns a copy to prevent external modification
 func (r *ModuleResolver) GetModules() map[string]*Module {
-	return r.modules
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Return a copy to prevent external modification
+	result := make(map[string]*Module, len(r.modules))
+	for k, v := range r.modules {
+		result[k] = v
+	}
+	return result
 }
