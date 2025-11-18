@@ -105,7 +105,7 @@ React Analyzer includes several rules to catch common React performance issues a
 
 | Rule                     | Description                                                                                              | Documentation                          |
 | ------------------------ | -------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `unstable-props-to-memo` | Detects unstable props breaking memoization (React.memo, useMemo, useCallback). **Cross-file analysis**. | _coming soon_                          |
+| `unstable-props-to-memo` | Detects unstable props breaking memoization (React.memo, useMemo, useCallback). **Cross-file analysis**. | [docs](docs/rules/unstable-props-to-memo.md) |
 | `no-object-deps`         | Prevents unstable object/array dependencies causing infinite re-render loops                             | [docs](docs/rules/no-object-deps.md)   |
 | `no-derived-state`       | Detects useState mirroring props via useEffect (unnecessary re-renders)                                  | [docs](docs/rules/no-derived-state.md) |
 | `no-stale-state`         | Prevents stale closures by requiring functional state updates                                            | [docs](docs/rules/no-stale-state.md)   |
@@ -116,6 +116,55 @@ React Analyzer includes several rules to catch common React performance issues a
 - **`unstable-props-in-effects`** - Detect unstable props in useEffect/useLayoutEffect (lower severity)
 - **`exhaustive-deps`** - Comprehensive dependency checking
 - **`require-memo-expensive-component`** - Suggest memoization for expensive components
+
+## Path Aliases
+
+React Analyzer automatically detects and supports path aliases for cross-file analysis:
+
+### Auto-detection from `tsconfig.json`
+
+If your project has a `tsconfig.json` with path mappings, React Analyzer will automatically use them:
+
+```json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@components/*": ["src/components/*"]
+    }
+  }
+}
+```
+
+### Custom Configuration with `.reactanalyzer.json`
+
+For non-TypeScript projects or to override `tsconfig.json`, create a `.reactanalyzer.json` file:
+
+```json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/": ["src/"],
+      "@components/": ["src/components/"],
+      "~/": ["./"]
+    }
+  }
+}
+```
+
+**Priority:** `.reactanalyzer.json` > `tsconfig.json`
+
+**Supported Import Formats:**
+```tsx
+import Button from '@/components/Button';       // ✅ Aliased import
+import { utils } from '@utils/helpers';         // ✅ Aliased with nested path
+import Component from './Component';            // ✅ Relative import (always supported)
+import React from 'react';                      // ✅ External package (skipped)
+```
+
+See `.reactanalyzer.example.json` for a complete configuration example.
 
 ## Troubleshooting
 

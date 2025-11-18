@@ -17,6 +17,7 @@ type ModuleResolver struct {
 	parserMu sync.Mutex         // Protects parser (tree-sitter is not thread-safe)
 	baseDir  string             // Project root directory
 	parser   *parser.TreeSitterParser
+	aliases  map[string]string // Path aliases: "@/" -> "/absolute/path/to/src/"
 }
 
 // NewModuleResolver creates a new module resolver
@@ -31,10 +32,18 @@ func NewModuleResolver(baseDir string) (*ModuleResolver, error) {
 		return nil, err
 	}
 
+	// Load path aliases from config files (tsconfig.json, .reactanalyzer.json)
+	aliases, err := LoadPathAliases(absBase)
+	if err != nil {
+		// Config loading is optional - continue without aliases if it fails
+		aliases = make(map[string]string)
+	}
+
 	return &ModuleResolver{
 		modules: make(map[string]*Module),
 		baseDir: absBase,
 		parser:  p,
+		aliases: aliases,
 	}, nil
 }
 
@@ -45,17 +54,26 @@ func (r *ModuleResolver) Close() error {
 
 // Resolve converts an import path to an absolute file path
 func (r *ModuleResolver) Resolve(fromFile string, importPath string) (string, error) {
-	// Skip external packages (no relative path)
+	var targetPath string
+
+	// Try alias resolution first for non-relative imports
 	if !strings.HasPrefix(importPath, ".") {
-		return "", fmt.Errorf("external package: %s", importPath)
+		// Check if this matches any alias
+		if aliasPrefix, aliasTarget, ok := FindLongestMatchingAlias(importPath, r.aliases); ok {
+			// Replace alias prefix with target path
+			relativePath := strings.TrimPrefix(importPath, aliasPrefix)
+			targetPath = filepath.Join(aliasTarget, relativePath)
+			targetPath = filepath.Clean(targetPath)
+		} else {
+			// No alias match - treat as external package
+			return "", fmt.Errorf("external package: %s", importPath)
+		}
+	} else {
+		// Relative path - resolve from importing file's directory
+		fromDir := filepath.Dir(fromFile)
+		targetPath = filepath.Join(fromDir, importPath)
+		targetPath = filepath.Clean(targetPath)
 	}
-
-	// Get the directory of the importing file
-	fromDir := filepath.Dir(fromFile)
-
-	// Resolve relative path
-	targetPath := filepath.Join(fromDir, importPath)
-	targetPath = filepath.Clean(targetPath)
 
 	// Try different extensions
 	extensions := []string{".tsx", ".ts", ".jsx", ".js"}
