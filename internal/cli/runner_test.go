@@ -71,13 +71,13 @@ func TestRun_FileWithViolations(t *testing.T) {
 		t.Errorf("Expected exit code 1, got %d", exitCode)
 	}
 
-	// Verify output contains issue count
-	if !strings.Contains(output, "Found 6 issues") {
-		t.Errorf("Expected '6 issues', got: %s", output)
+	// Verify output contains issue count (now 7 with inline literal detection)
+	if !strings.Contains(output, "Found 7 issues") {
+		t.Errorf("Expected '7 issues', got: %s", output)
 	}
 
 	// Verify specific violations are reported
-	expectedViolations := []string{"config", "items", "options", "settings", "preferences", "theme"}
+	expectedViolations := []string{"config", "items", "options", "settings", "preferences", "theme", "Inline object"}
 	for _, varName := range expectedViolations {
 		if !strings.Contains(output, varName) {
 			t.Errorf("Expected violation for '%s' in output", varName)
@@ -228,8 +228,8 @@ func TestRun_QuietModeWithIssues(t *testing.T) {
 		t.Errorf("Expected exit code 1, got %d", exitCode)
 	}
 
-	// Quiet mode should still show issues
-	if !strings.Contains(output, "Found 6 issues") {
+	// Quiet mode should still show issues (now 7 with inline literal detection)
+	if !strings.Contains(output, "Found 7 issues") {
 		t.Errorf("Expected issues to be shown even in quiet mode, got: %s", output)
 	}
 }

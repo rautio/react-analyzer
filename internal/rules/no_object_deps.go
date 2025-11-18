@@ -55,17 +55,49 @@ func (r *NoObjectDeps) checkFunction(funcNode *parser.Node, filePath string) []I
 
 		// Check each dependency
 		for _, dep := range deps.GetArrayElements() {
-			// Check if this dependency is a problematic variable
+			depType := dep.Type()
 			depText := dep.Text()
-			if problematicVars[depText] {
+
+			// Case 1: Inline object/array literal (e.g., [{ foo: 'bar' }], [[1, 2, 3]])
+			if depType == "object" || depType == "array" {
+				line, col := dep.StartPoint()
+				issues = append(issues, Issue{
+					Rule:     r.Name(),
+					Message:  fmt.Sprintf("Inline %s literal in dependency array will cause infinite re-renders", depType),
+					FilePath: filePath,
+					Line:     line + 1,
+					Column:   col,
+				})
+				continue
+			}
+
+			// Case 2: Simple identifier (check this before member expressions)
+			if depType == "identifier" && problematicVars[depText] {
 				line, col := dep.StartPoint()
 				issues = append(issues, Issue{
 					Rule:     r.Name(),
 					Message:  fmt.Sprintf("Dependency '%s' is an object/array created in render and will cause infinite re-renders", depText),
 					FilePath: filePath,
-					Line:     line + 1, // Convert to 1-indexed
+					Line:     line + 1,
 					Column:   col,
 				})
+				continue
+			}
+
+			// Case 3: Property access (e.g., config.theme, user?.name)
+			// Extract the base identifier from member expressions
+			if depType == "member_expression" || depType == "subscript_expression" {
+				baseIdentifier := r.getBaseIdentifier(dep)
+				if baseIdentifier != "" && problematicVars[baseIdentifier] {
+					line, col := dep.StartPoint()
+					issues = append(issues, Issue{
+						Rule:     r.Name(),
+						Message:  fmt.Sprintf("Dependency '%s' accesses object/array '%s' created in render and will cause infinite re-renders", depText, baseIdentifier),
+						FilePath: filePath,
+						Line:     line + 1,
+						Column:   col,
+					})
+				}
 			}
 		}
 
@@ -73,6 +105,39 @@ func (r *NoObjectDeps) checkFunction(funcNode *parser.Node, filePath string) []I
 	})
 
 	return issues
+}
+
+// getBaseIdentifier extracts the base identifier from a member expression
+// e.g., "config.theme" → "config", "user?.name" → "user", "items[0]" → "items"
+func (r *NoObjectDeps) getBaseIdentifier(node *parser.Node) string {
+	nodeType := node.Type()
+
+	// If it's already an identifier, return its text
+	if nodeType == "identifier" {
+		return node.Text()
+	}
+
+	// For member expressions (e.g., config.theme, user?.name)
+	if nodeType == "member_expression" {
+		// Get the object part (left side)
+		objectNode := node.ChildByFieldName("object")
+		if objectNode != nil {
+			// Recursively extract the base identifier
+			return r.getBaseIdentifier(objectNode)
+		}
+	}
+
+	// For subscript expressions (e.g., items[0])
+	if nodeType == "subscript_expression" {
+		// Get the object part
+		objectNode := node.ChildByFieldName("object")
+		if objectNode != nil {
+			return r.getBaseIdentifier(objectNode)
+		}
+	}
+
+	// Not a member/subscript expression or couldn't extract
+	return ""
 }
 
 // findProblematicVars finds variables initialized with object/array literals
