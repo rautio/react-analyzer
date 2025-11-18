@@ -96,3 +96,93 @@ func TestExtractImports_RealFile(t *testing.T) {
 		t.Error("Expected to find React import")
 	}
 }
+
+func TestExtractImports_AliasedImports(t *testing.T) {
+	code := `
+import React from 'react';
+import { useState, useEffect as useMount } from 'react';
+import { MemoChild as FastChild, AnotherMemo } from './components';
+`
+
+	p, err := parser.NewParser()
+	if err != nil {
+		t.Fatalf("Failed to create parser: %v", err)
+	}
+	defer p.Close()
+
+	ast, err := p.ParseFile("test.tsx", []byte(code))
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+	defer ast.Close()
+
+	imports := ExtractImports(ast)
+
+	// Should have 3 imports (2 from react + 1 from ./components)
+	if len(imports) != 3 {
+		t.Fatalf("Expected 3 imports, got %d", len(imports))
+	}
+
+	// Check first import (react default)
+	reactImport := imports[0]
+	if reactImport.Source != "react" {
+		t.Errorf("Expected source 'react', got '%s'", reactImport.Source)
+	}
+	if reactImport.Default != "React" {
+		t.Errorf("Expected default 'React', got '%s'", reactImport.Default)
+	}
+
+	// Check second import (react named imports)
+	reactNamedImport := imports[1]
+	if reactNamedImport.Source != "react" {
+		t.Errorf("Expected source 'react', got '%s'", reactNamedImport.Source)
+	}
+	if len(reactNamedImport.Named) != 2 {
+		t.Fatalf("Expected 2 named imports from react, got %d", len(reactNamedImport.Named))
+	}
+
+	// Check useState (no alias)
+	useState := reactNamedImport.Named[0]
+	if useState.ImportedName != "useState" {
+		t.Errorf("Expected ImportedName 'useState', got '%s'", useState.ImportedName)
+	}
+	if useState.LocalName != "useState" {
+		t.Errorf("Expected LocalName 'useState', got '%s'", useState.LocalName)
+	}
+
+	// Check useEffect (aliased as useMount)
+	useEffect := reactNamedImport.Named[1]
+	if useEffect.ImportedName != "useEffect" {
+		t.Errorf("Expected ImportedName 'useEffect', got '%s'", useEffect.ImportedName)
+	}
+	if useEffect.LocalName != "useMount" {
+		t.Errorf("Expected LocalName 'useMount', got '%s'", useEffect.LocalName)
+	}
+
+	// Check third import (./components)
+	compImport := imports[2]
+	if compImport.Source != "./components" {
+		t.Errorf("Expected source './components', got '%s'", compImport.Source)
+	}
+	if len(compImport.Named) != 2 {
+		t.Fatalf("Expected 2 named imports from ./components, got %d", len(compImport.Named))
+	}
+
+	// Check MemoChild (aliased as FastChild)
+	memoChild := compImport.Named[0]
+	if memoChild.ImportedName != "MemoChild" {
+		t.Errorf("Expected ImportedName 'MemoChild', got '%s'", memoChild.ImportedName)
+	}
+	if memoChild.LocalName != "FastChild" {
+		t.Errorf("Expected LocalName 'FastChild', got '%s'", memoChild.LocalName)
+	}
+
+	// Check AnotherMemo (no alias)
+	anotherMemo := compImport.Named[1]
+	if anotherMemo.ImportedName != "AnotherMemo" {
+		t.Errorf("Expected ImportedName 'AnotherMemo', got '%s'", anotherMemo.ImportedName)
+	}
+	if anotherMemo.LocalName != "AnotherMemo" {
+		t.Errorf("Expected LocalName 'AnotherMemo', got '%s'", anotherMemo.LocalName)
+	}
+}

@@ -76,22 +76,37 @@ func parseImportClause(clause *parser.Node, imp *Import) {
 }
 
 // extractNamedImports gets the list of named imports from a named_imports node
-func extractNamedImports(node *parser.Node) []string {
-	var names []string
+func extractNamedImports(node *parser.Node) []NamedImport {
+	var imports []NamedImport
 
 	node.Walk(func(n *parser.Node) bool {
 		// Look for import_specifier nodes
+		// Structure: import { Foo as Bar } creates:
+		//   import_specifier
+		//     - identifier: "Foo" (imported name)
+		//     - identifier: "Bar" (local alias)
 		if n.Type() == "import_specifier" {
-			// Get the name (could be aliased)
+			var identifiers []string
 			for _, child := range n.Children() {
 				if child.Type() == "identifier" {
-					names = append(names, child.Text())
-					break
+					identifiers = append(identifiers, child.Text())
 				}
+			}
+
+			if len(identifiers) > 0 {
+				namedImport := NamedImport{
+					ImportedName: identifiers[0],
+					LocalName:    identifiers[0], // Default to same name
+				}
+				// If there's a second identifier, it's the alias
+				if len(identifiers) > 1 {
+					namedImport.LocalName = identifiers[1]
+				}
+				imports = append(imports, namedImport)
 			}
 		}
 		return true
 	})
 
-	return names
+	return imports
 }

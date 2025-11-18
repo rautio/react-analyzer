@@ -383,16 +383,19 @@ func (r *UnstablePropsToMemo) isComponentMemoized(componentName string, currentF
 
 	// Not local - check if it's imported
 	var importSource string
+	var importedName string // The actual name exported from the module
 	for _, imp := range module.Imports {
 		// Check default import
 		if imp.Default == componentName {
 			importSource = imp.Source
+			importedName = componentName
 			break
 		}
-		// Check named imports
+		// Check named imports (use LocalName for lookup, ImportedName for target module)
 		for _, named := range imp.Named {
-			if named == componentName {
+			if named.LocalName == componentName {
 				importSource = imp.Source
+				importedName = named.ImportedName
 				break
 			}
 		}
@@ -423,7 +426,8 @@ func (r *UnstablePropsToMemo) isComponentMemoized(componentName string, currentF
 	analyzer.AnalyzeSymbols(targetModule)
 
 	// Check if the component is memoized in the target module
-	if symbol, exists := targetModule.Symbols[componentName]; exists {
+	// Use the imported name (not the local alias) to look up in the target module
+	if symbol, exists := targetModule.Symbols[importedName]; exists {
 		return symbol.IsMemoized, nil
 	}
 
