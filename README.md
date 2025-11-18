@@ -356,10 +356,6 @@ Fix syntax errors in your code first.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
-## License
-
-TBD
-
 ---
 
 **Questions?** Run `react-analyzer --help` or open an issue on GitHub.
