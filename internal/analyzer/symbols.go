@@ -72,11 +72,19 @@ func handleVariableDeclaration(node *parser.Node, module *Module) {
 
 			name := nameNode.Text()
 
+			// Check if symbol already exists (might have been marked as exported)
+			existingSymbol, exists := module.Symbols[name]
+
 			// Determine symbol type and properties
 			symbol := &Symbol{
 				Name: name,
 				Type: SymbolVariable,
 				Node: child,
+			}
+
+			// Preserve IsExported flag if symbol already exists
+			if exists {
+				symbol.IsExported = existingSymbol.IsExported
 			}
 
 			// Check if value is React.memo(...)
@@ -104,6 +112,9 @@ func handleFunctionDeclaration(node *parser.Node, module *Module) {
 
 	name := nameNode.Text()
 
+	// Check if symbol already exists (might have been marked as exported)
+	existingSymbol, exists := module.Symbols[name]
+
 	symbolType := SymbolFunction
 	if looksLikeComponent(name) {
 		symbolType = SymbolComponent
@@ -113,6 +124,11 @@ func handleFunctionDeclaration(node *parser.Node, module *Module) {
 		Name: name,
 		Type: symbolType,
 		Node: node,
+	}
+
+	// Preserve IsExported flag if symbol already exists
+	if exists {
+		symbol.IsExported = existingSymbol.IsExported
 	}
 
 	module.Symbols[name] = symbol
@@ -127,10 +143,18 @@ func handleClassDeclaration(node *parser.Node, module *Module) {
 
 	name := nameNode.Text()
 
+	// Check if symbol already exists (might have been marked as exported)
+	existingSymbol, exists := module.Symbols[name]
+
 	symbol := &Symbol{
 		Name: name,
 		Type: SymbolClass,
 		Node: node,
+	}
+
+	// Preserve IsExported flag if symbol already exists
+	if exists {
+		symbol.IsExported = existingSymbol.IsExported
 	}
 
 	// Class components are components
@@ -143,7 +167,22 @@ func handleClassDeclaration(node *parser.Node, module *Module) {
 
 // markAsExported marks symbols from a declaration as exported
 func markAsExported(node *parser.Node, module *Module) {
-	// Find all symbols declared in this node and mark them as exported
+	nodeType := node.Type()
+
+	// Handle function and class declarations - get name directly from the node
+	if nodeType == "function_declaration" || nodeType == "class_declaration" {
+		nameNode := node.ChildByFieldName("name")
+		if nameNode != nil {
+			name := nameNode.Text()
+			if symbol, exists := module.Symbols[name]; exists {
+				symbol.IsExported = true
+			}
+		}
+		return
+	}
+
+	// For variable declarations (lexical_declaration, variable_declaration, etc.),
+	// walk the tree to find variable_declarator nodes
 	node.Walk(func(n *parser.Node) bool {
 		if n.Type() == "variable_declarator" {
 			nameNode := n.ChildByFieldName("name")
