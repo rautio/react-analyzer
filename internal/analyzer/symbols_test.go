@@ -35,6 +35,12 @@ export const MyComponent = memo(({ name }) => {
 
 	AnalyzeSymbols(module)
 
+	// Debug output
+	t.Logf("Found %d symbols:", len(module.Symbols))
+	for name, sym := range module.Symbols {
+		t.Logf("  %s: IsMemoized=%v, IsExported=%v", name, sym.IsMemoized, sym.IsExported)
+	}
+
 	// Should find MyComponent
 	symbol, exists := module.Symbols["MyComponent"]
 	if !exists {

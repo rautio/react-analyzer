@@ -127,6 +127,9 @@ func (r *ModuleResolver) GetModule(filePath string) (*Module, error) {
 		Symbols:  make(map[string]*Symbol),
 	}
 
+	// Analyze symbols in this module (populate Symbols map)
+	AnalyzeSymbols(module)
+
 	// Cache it with write lock
 	r.mu.Lock()
 	// Double-check: another goroutine might have cached it while we were parsing

@@ -26,7 +26,7 @@ func analyzeNode(node *parser.Node, module *Module) {
 	switch nodeType {
 	case "export_statement":
 		handleExportStatement(node, module)
-	case "variable_declaration":
+	case "variable_declaration", "lexical_declaration":
 		handleVariableDeclaration(node, module)
 	case "function_declaration":
 		handleFunctionDeclaration(node, module)

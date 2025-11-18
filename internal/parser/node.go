@@ -101,6 +101,7 @@ func (n *Node) EndPoint() (row, col uint32) {
 }
 
 // IsHookCall checks if this node is a call to a React hook (function starting with "use")
+// Handles both bare hooks (useEffect) and namespaced hooks (React.useEffect)
 func (n *Node) IsHookCall() bool {
 	if n == nil || n.Type() != "call_expression" {
 		return false
@@ -112,11 +113,45 @@ func (n *Node) IsHookCall() bool {
 		return false
 	}
 
-	// Get the function name
-	funcName := funcNode.Text()
+	// Handle member_expression (e.g., React.useEffect)
+	if funcNode.Type() == "member_expression" {
+		// Get the property (the part after the dot)
+		property := funcNode.ChildByFieldName("property")
+		if property == nil {
+			return false
+		}
+		hookName := property.Text()
+		return strings.HasPrefix(hookName, "use") && len(hookName) > 3
+	}
 
-	// React hooks start with "use"
+	// Handle bare identifier (e.g., useEffect)
+	funcName := funcNode.Text()
 	return strings.HasPrefix(funcName, "use") && len(funcName) > 3
+}
+
+// GetHookName returns the hook name (e.g., "useEffect", "useState")
+// Works for both bare hooks and namespaced hooks (React.useEffect)
+func (n *Node) GetHookName() string {
+	if n == nil || n.Type() != "call_expression" {
+		return ""
+	}
+
+	funcNode := n.ChildByFieldName("function")
+	if funcNode == nil {
+		return ""
+	}
+
+	// Handle member_expression (e.g., React.useEffect)
+	if funcNode.Type() == "member_expression" {
+		property := funcNode.ChildByFieldName("property")
+		if property == nil {
+			return ""
+		}
+		return property.Text()
+	}
+
+	// Handle bare identifier (e.g., useEffect)
+	return funcNode.Text()
 }
 
 // GetDependencyArray returns the dependency array for a hook call

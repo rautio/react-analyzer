@@ -186,13 +186,8 @@ func (r *NoDerivedState) findUseEffects(componentNode *parser.Node) []EffectDecl
 			return true
 		}
 
-		// Check if it's useEffect
-		if node.Type() != "call_expression" {
-			return true
-		}
-
-		funcNode := node.ChildByFieldName("function")
-		if funcNode == nil || funcNode.Text() != "useEffect" {
+		// Check if it's useEffect (handles both bare and namespaced hooks)
+		if node.GetHookName() != "useEffect" {
 			return true
 		}
 

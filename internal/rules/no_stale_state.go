@@ -106,9 +106,8 @@ func (r *NoStaleState) findUseStateDeclarations(root *parser.Node) map[string]St
 			return true
 		}
 
-		// Check if the function being called is useState
-		funcNode := valueNode.ChildByFieldName("function")
-		if funcNode == nil || funcNode.Text() != "useState" {
+		// Check if the function being called is useState (handles both bare and namespaced hooks)
+		if valueNode.GetHookName() != "useState" {
 			return true
 		}
 
@@ -170,15 +169,33 @@ func (r *NoStaleState) argumentReferencesState(node *parser.Node, stateName stri
 }
 
 // generateSuggestion creates the functional form suggestion
+// Replaces all references to the state variable with 'prev'
 func (r *NoStaleState) generateSuggestion(expr *parser.Node, stateName string) string {
-	// Get the expression text
-	exprText := expr.Text()
+	return r.replaceStateWithPrev(expr, stateName)
+}
 
-	// For simple cases, try to generate a helpful suggestion
-	// This is a simplified version - just show the expression
-	// A more advanced version would do AST manipulation to replace stateName with 'prev'
+// replaceStateWithPrev recursively replaces state variable references with 'prev'
+func (r *NoStaleState) replaceStateWithPrev(node *parser.Node, stateName string) string {
+	if node == nil {
+		return ""
+	}
 
-	// For now, just return the expression as-is
-	// The user will understand they need to wrap it and replace state with prev
-	return exprText
+	// If this is an identifier matching the state name, replace it
+	if node.Type() == "identifier" && node.Text() == stateName {
+		return "prev"
+	}
+
+	// For nodes with no children, return the text as-is
+	children := node.Children()
+	if len(children) == 0 {
+		return node.Text()
+	}
+
+	// Recursively process children
+	var result string
+	for _, child := range children {
+		result += r.replaceStateWithPrev(child, stateName)
+	}
+
+	return result
 }
