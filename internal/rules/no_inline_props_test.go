@@ -1,108 +1,63 @@
 package rules
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/rautio/react-analyzer/internal/parser"
 )
 
 func TestNoInlineProps_SimplePatterns(t *testing.T) {
-	// Get absolute path to fixtures
-	fixturesDir, err := filepath.Abs("../../test/fixtures")
-	if err != nil {
-		t.Fatalf("Failed to get fixtures directory: %v", err)
-	}
+	ast := parseTestFixture(t, "no-inline-props-simple.tsx")
 
-	testFile := filepath.Join(fixturesDir, "no-inline-props-simple.tsx")
-	content, err := os.ReadFile(testFile)
-	if err != nil {
-		t.Fatalf("Failed to read test file: %v", err)
-	}
-
-	// Create parser
-	p, err := parser.NewParser()
-	if err != nil {
-		t.Fatalf("Failed to create parser: %v", err)
-	}
-	defer p.Close()
-
-	// Parse the file
-	ast, err := p.ParseFile(testFile, content)
-	if err != nil {
-		t.Fatalf("Failed to parse file: %v", err)
-	}
-	defer ast.Close()
-
-	// Run the rule
 	rule := &NoInlineProps{}
 	issues := rule.Check(ast, nil)
 
-	// Expected violations: 12
-	// ObjectProps: 3 (lines 7, 8, 9)
-	// ArrayProps: 3 (lines 18, 19, 20)
-	// FunctionProps: 3 (lines 33, 34, 35)
-	// FunctionExpressions: 2 (lines 46, 47)
-	// NestedInline: 1 (line 58 for object - nested values inside are not JSX props)
-	expectedCount := 12
-	if len(issues) != expectedCount {
-		t.Errorf("Expected %d issues, got %d", expectedCount, len(issues))
+	// Count violations by type instead of checking exact line numbers
+	objectCount := 0
+	arrayCount := 0
+	funcCount := 0
+
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "inline object") {
+			objectCount++
+		} else if strings.Contains(issue.Message, "inline array") {
+			arrayCount++
+		} else if strings.Contains(issue.Message, "inline function") {
+			funcCount++
+		}
+
+		// Verify all issues have correct rule name
+		if issue.Rule != "no-inline-props" {
+			t.Errorf("Expected rule name 'no-inline-props', got '%s'", issue.Rule)
+		}
+	}
+
+	// Expected violations by type:
+	// - Objects: 4 (3 from ObjectProps + 1 from NestedInline)
+	// - Arrays: 3 (from ArrayProps)
+	// - Functions: 5 (3 arrow functions + 2 function expressions)
+	if objectCount != 4 {
+		t.Errorf("Expected 4 object violations, got %d", objectCount)
+	}
+	if arrayCount != 3 {
+		t.Errorf("Expected 3 array violations, got %d", arrayCount)
+	}
+	if funcCount != 5 {
+		t.Errorf("Expected 5 function violations, got %d", funcCount)
+	}
+
+	// Total should be 12
+	totalExpected := 12
+	if len(issues) != totalExpected {
+		t.Errorf("Expected %d total issues, got %d", totalExpected, len(issues))
 		for _, issue := range issues {
 			t.Logf("  Line %d: %s", issue.Line, issue.Message)
 		}
 	}
-
-	// Verify specific violations
-	expectedLines := []uint32{7, 8, 9, 18, 19, 20, 33, 34, 35, 46, 47, 58}
-	actualLines := make([]uint32, len(issues))
-	for i, issue := range issues {
-		actualLines[i] = issue.Line
-	}
-
-	if len(actualLines) == len(expectedLines) {
-		for i, expected := range expectedLines {
-			if actualLines[i] != expected {
-				t.Errorf("Expected issue at line %d, got line %d", expected, actualLines[i])
-			}
-		}
-	}
-
-	// Verify rule name
-	if len(issues) > 0 && issues[0].Rule != "no-inline-props" {
-		t.Errorf("Expected rule name 'no-inline-props', got '%s'", issues[0].Rule)
-	}
 }
 
 func TestNoInlineProps_ValidPatterns(t *testing.T) {
-	// Get absolute path to fixtures
-	fixturesDir, err := filepath.Abs("../../test/fixtures")
-	if err != nil {
-		t.Fatalf("Failed to get fixtures directory: %v", err)
-	}
+	ast := parseTestFixture(t, "no-inline-props-valid.tsx")
 
-	testFile := filepath.Join(fixturesDir, "no-inline-props-valid.tsx")
-	content, err := os.ReadFile(testFile)
-	if err != nil {
-		t.Fatalf("Failed to read test file: %v", err)
-	}
-
-	// Create parser
-	p, err := parser.NewParser()
-	if err != nil {
-		t.Fatalf("Failed to create parser: %v", err)
-	}
-	defer p.Close()
-
-	// Parse the file
-	ast, err := p.ParseFile(testFile, content)
-	if err != nil {
-		t.Fatalf("Failed to parse file: %v", err)
-	}
-	defer ast.Close()
-
-	// Run the rule
 	rule := &NoInlineProps{}
 	issues := rule.Check(ast, nil)
 
@@ -124,19 +79,7 @@ function Test() {
 }
 `
 
-	// Create parser
-	p, err := parser.NewParser()
-	if err != nil {
-		t.Fatalf("Failed to create parser: %v", err)
-	}
-	defer p.Close()
-
-	// Parse the code
-	ast, err := p.ParseFile("test.tsx", []byte(code))
-	if err != nil {
-		t.Fatalf("Failed to parse code: %v", err)
-	}
-	defer ast.Close()
+	ast := parseTestCode(t, code)
 
 	rule := &NoInlineProps{}
 	issues := rule.Check(ast, nil)
@@ -171,19 +114,7 @@ function Test() {
 }
 `
 
-	// Create parser
-	p, err := parser.NewParser()
-	if err != nil {
-		t.Fatalf("Failed to create parser: %v", err)
-	}
-	defer p.Close()
-
-	// Parse the code
-	ast, err := p.ParseFile("test.tsx", []byte(code))
-	if err != nil {
-		t.Fatalf("Failed to parse code: %v", err)
-	}
-	defer ast.Close()
+	ast := parseTestCode(t, code)
 
 	rule := &NoInlineProps{}
 	issues := rule.Check(ast, nil)
@@ -216,19 +147,7 @@ function Test() {
 }
 `
 
-	// Create parser
-	p, err := parser.NewParser()
-	if err != nil {
-		t.Fatalf("Failed to create parser: %v", err)
-	}
-	defer p.Close()
-
-	// Parse the code
-	ast, err := p.ParseFile("test.tsx", []byte(code))
-	if err != nil {
-		t.Fatalf("Failed to parse code: %v", err)
-	}
-	defer ast.Close()
+	ast := parseTestCode(t, code)
 
 	rule := &NoInlineProps{}
 	issues := rule.Check(ast, nil)

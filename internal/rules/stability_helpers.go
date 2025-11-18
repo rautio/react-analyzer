@@ -65,9 +65,11 @@ func GetPropName(attrNode *parser.Node) string {
 		return ""
 	}
 
-	nameNode := attrNode.ChildByFieldName("name")
-	if nameNode != nil {
-		return nameNode.Text()
+	// Field-based access doesn't work for jsx_attribute - iterate through children
+	for _, child := range attrNode.Children() {
+		if child.Type() == "property_identifier" {
+			return child.Text()
+		}
 	}
 
 	return ""
@@ -79,16 +81,22 @@ func GetPropValue(attrNode *parser.Node) *parser.Node {
 		return nil
 	}
 
-	// Check for jsx_expression value: prop={value}
-	valueNode := attrNode.ChildByFieldName("value")
-	if valueNode != nil && valueNode.Type() == "jsx_expression" {
-		// Get the expression inside the braces
-		for _, child := range valueNode.NamedChildren() {
+	// Iterate through children to find jsx_expression value: prop={value}
+	for _, child := range attrNode.Children() {
+		if child.Type() == "jsx_expression" {
+			// Get the expression inside the braces
+			namedChildren := child.NamedChildren()
+			if len(namedChildren) > 0 {
+				return namedChildren[0]
+			}
+		}
+		// String literals don't have jsx_expression wrapper
+		if child.Type() == "string" {
 			return child
 		}
 	}
 
-	return valueNode
+	return nil
 }
 
 // IsPropIdentifier checks if a dependency is a prop parameter
