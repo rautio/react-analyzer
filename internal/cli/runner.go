@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rautio/react-analyzer/internal/analyzer"
+	"github.com/rautio/react-analyzer/internal/graph"
 	"github.com/rautio/react-analyzer/internal/parser"
 	"github.com/rautio/react-analyzer/internal/rules"
 )
@@ -138,6 +139,40 @@ func Run(path string, opts *Options) int {
 		if len(result.Issues) > 0 {
 			stats.FilesWithIssues++
 			allIssues = append(allIssues, result.Issues...)
+		}
+	}
+
+	// Run graph-based rules (if any modules were parsed)
+	if stats.FilesAnalyzed > 0 {
+		if opts.Verbose {
+			fmt.Println("\nBuilding dependency graph...")
+		}
+		graphStart := time.Now()
+
+		// Build the graph from all parsed modules
+		builder := graph.NewBuilder(resolver)
+		depGraph, err := builder.Build()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to build dependency graph: %v\n", err)
+		} else {
+			// Run graph-based rules
+			graphIssues := registry.RunGraph(depGraph)
+			if len(graphIssues) > 0 {
+				allIssues = append(allIssues, graphIssues...)
+				// Update stats for graph-based issues
+				graphFilesAffected := make(map[string]bool)
+				for _, issue := range graphIssues {
+					graphFilesAffected[issue.FilePath] = true
+				}
+				stats.FilesWithIssues += len(graphFilesAffected)
+			}
+
+			if opts.Verbose {
+				fmt.Printf("Graph analysis completed in %s\n", formatDuration(time.Since(graphStart)))
+				fmt.Printf("  Components: %d\n", len(depGraph.ComponentNodes))
+				fmt.Printf("  State nodes: %d\n", len(depGraph.StateNodes))
+				fmt.Printf("  Edges: %d\n", len(depGraph.Edges))
+			}
 		}
 	}
 

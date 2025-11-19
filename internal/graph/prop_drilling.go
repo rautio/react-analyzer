@@ -1,0 +1,262 @@
+package graph
+
+import (
+	"fmt"
+)
+
+// PropDrillingViolation represents a detected prop drilling anti-pattern
+type PropDrillingViolation struct {
+	PropName              string
+	Origin                Location
+	Consumer              Location
+	PassthroughCount      int
+	PassthroughComponents []ComponentReference
+	Depth                 int
+	Recommendation        string
+}
+
+// ComponentReference represents a reference to a component
+type ComponentReference struct {
+	Name     string
+	FilePath string
+	Line     uint32
+}
+
+// DetectPropDrilling finds all prop drilling violations in the graph
+// A violation occurs when a prop is passed through 3+ component levels
+// with intermediate components not using the prop (passthrough only)
+func DetectPropDrilling(g *Graph) []PropDrillingViolation {
+	var violations []PropDrillingViolation
+
+	// Find all state origins (useState, useReducer, etc.)
+	origins := findPropOrigins(g)
+
+	// For each origin, trace where it flows
+	for stateID, origin := range origins {
+		// Find all components that consume this state
+		consumers := findPropConsumers(stateID, g)
+
+		// Only report violations for leaf consumers (deepest in the chain)
+		// to avoid reporting multiple violations for the same prop drilling path
+		leafConsumers := findLeafConsumers(consumers, origin.Name, g)
+
+		// For each leaf consumer, trace the path from origin to consumer
+		for _, consumer := range leafConsumers {
+			path := tracePropPath(origin, consumer, g)
+
+			// Violation if drilling depth >= 3 (2+ passthrough components)
+			// Path includes: origin component → intermediate1 → intermediate2 → consumer
+			// Depth 3 means: origin → passthrough1 → passthrough2 → consumer (3 levels)
+			if path.Depth >= 3 {
+				violation := PropDrillingViolation{
+					PropName:              origin.Name,
+					Origin:                origin.Location,
+					Consumer:              consumer.Location,
+					PassthroughCount:      len(path.PassthroughPath),
+					PassthroughComponents: buildComponentReferences(path.PassthroughPath),
+					Depth:                 path.Depth,
+					Recommendation:        generateRecommendation(origin, path),
+				}
+
+				violations = append(violations, violation)
+			}
+		}
+	}
+
+	return violations
+}
+
+// PropPath represents the path a prop takes from origin to consumer
+type PropPath struct {
+	Origin          *StateNode
+	Consumer        *ComponentNode
+	PassthroughPath []*ComponentNode // Components that pass but don't use the prop
+	Depth           int              // Number of levels (origin to consumer)
+}
+
+// findPropOrigins finds all state nodes that are origins (defined via useState, etc.)
+func findPropOrigins(g *Graph) map[string]*StateNode {
+	origins := make(map[string]*StateNode)
+
+	for id, stateNode := range g.StateNodes {
+		// Props that are defined as state are origins
+		if stateNode.Type == StateTypeUseState ||
+			stateNode.Type == StateTypeUseReducer ||
+			stateNode.Type == StateTypeContext {
+			origins[id] = stateNode
+		}
+	}
+
+	return origins
+}
+
+// findLeafConsumers filters consumers to only include leaf nodes
+// (components that don't pass this prop to any children)
+func findLeafConsumers(consumers []*ComponentNode, propName string, g *Graph) []*ComponentNode {
+	var leafConsumers []*ComponentNode
+
+	for _, consumer := range consumers {
+		// Check if this consumer passes the prop to any child
+		hasOutgoingProp := false
+		outgoingEdges := g.GetOutgoingEdges(consumer.ID)
+		for _, edge := range outgoingEdges {
+			if edge.Type == EdgeTypePasses && edge.PropName == propName {
+				hasOutgoingProp = true
+				break
+			}
+		}
+
+		// Only include if it doesn't pass the prop to children (leaf node)
+		if !hasOutgoingProp {
+			leafConsumers = append(leafConsumers, consumer)
+		}
+	}
+
+	return leafConsumers
+}
+
+// findPropConsumers finds all components in the prop flow chain for a specific prop
+func findPropConsumers(propID string, g *Graph) []*ComponentNode {
+	var consumers []*ComponentNode
+
+	// Get the state node to find the prop name
+	stateNode, exists := g.StateNodes[propID]
+	if !exists {
+		return consumers
+	}
+	propName := stateNode.Name
+
+	// Start from the origin component
+	originComp, err := g.FindStateOrigin(propID)
+	if err != nil {
+		return consumers
+	}
+
+	// Use BFS to find all components that receive this specific prop
+	visited := make(map[string]bool)
+	queue := []string{originComp.ID}
+
+	for len(queue) > 0 {
+		currentCompID := queue[0]
+		queue = queue[1:]
+
+		if visited[currentCompID] {
+			continue
+		}
+		visited[currentCompID] = true
+
+		// Check all "passes" edges from this component
+		outgoingEdges := g.GetOutgoingEdges(currentCompID)
+		for _, edge := range outgoingEdges {
+			// Only follow edges that pass THIS specific prop
+			if edge.Type == EdgeTypePasses && edge.PropName == propName {
+				// This component passes our specific prop to a child
+				targetComp, exists := g.ComponentNodes[edge.TargetID]
+				if !exists {
+					continue
+				}
+
+				// Add the child component as a consumer
+				if !visited[edge.TargetID] {
+					consumers = append(consumers, targetComp)
+					queue = append(queue, edge.TargetID)
+				}
+			}
+		}
+	}
+
+	return consumers
+}
+
+// componentUsesProp checks if a component actually uses a prop or just passes it through
+func componentUsesProp(comp *ComponentNode, propName string, g *Graph) bool {
+	// Check if this prop is only in PropsPassedTo (pure passthrough)
+	// vs. being used locally
+
+	// If the component has no children, it must be using the prop
+	if len(comp.Children) == 0 {
+		return true
+	}
+
+	// Check if prop is passed to ALL children
+	// If it's not passed to any child, then it must be used locally
+	passedToChild := false
+	for _, propsToChild := range comp.PropsPassedTo {
+		for _, passedProp := range propsToChild {
+			if passedProp == propName {
+				passedToChild = true
+				break
+			}
+		}
+	}
+
+	// For now, if it's passed to a child, assume it's a passthrough
+	// If it's NOT passed to any child, it's being used
+	// This is a simplified heuristic - full implementation would check AST usage
+	return !passedToChild
+}
+
+// tracePropPath traces the path from a state origin to a consumer component
+func tracePropPath(origin *StateNode, consumer *ComponentNode, g *Graph) *PropPath {
+	path := &PropPath{
+		Origin:          origin,
+		Consumer:        consumer,
+		PassthroughPath: []*ComponentNode{},
+		Depth:           0,
+	}
+
+	// Find the component that defines this state
+	originComp, err := g.FindStateOrigin(origin.ID)
+	if err != nil {
+		return path
+	}
+
+	// Find shortest path between origin component and consumer component
+	componentPath := g.FindPathBetweenComponents(originComp.ID, consumer.ID)
+	if componentPath == nil || len(componentPath) < 2 {
+		return path
+	}
+
+	// Build passthrough path (exclude origin and consumer)
+	path.Depth = len(componentPath)
+
+	// Extract the prop name from the state node
+	propName := origin.Name
+
+	for i := 1; i < len(componentPath)-1; i++ {
+		if comp, exists := g.ComponentNodes[componentPath[i]]; exists {
+			// Check if this component is a true passthrough (doesn't use the prop)
+			if !componentUsesProp(comp, propName, g) {
+				path.PassthroughPath = append(path.PassthroughPath, comp)
+			}
+		}
+	}
+
+	return path
+}
+
+// buildComponentReferences converts ComponentNodes to ComponentReferences
+func buildComponentReferences(components []*ComponentNode) []ComponentReference {
+	refs := make([]ComponentReference, len(components))
+	for i, comp := range components {
+		refs[i] = ComponentReference{
+			Name:     comp.Name,
+			FilePath: comp.Location.FilePath,
+			Line:     comp.Location.Line,
+		}
+	}
+	return refs
+}
+
+// generateRecommendation creates a helpful recommendation for fixing the violation
+func generateRecommendation(origin *StateNode, path *PropPath) string {
+	// Simple recommendation for Phase 2.1
+	return fmt.Sprintf(
+		"Consider using Context API to avoid passing '%s' through %d component levels. "+
+			"Create a context at %s and consume it directly in %s.",
+		origin.Name,
+		path.Depth,
+		origin.Location.Component,
+		path.Consumer.Name,
+	)
+}

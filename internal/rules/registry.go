@@ -2,6 +2,7 @@ package rules
 
 import (
 	"github.com/rautio/react-analyzer/internal/analyzer"
+	"github.com/rautio/react-analyzer/internal/graph"
 	"github.com/rautio/react-analyzer/internal/parser"
 )
 
@@ -19,6 +20,7 @@ func NewRegistry() *Registry {
 			&NoDerivedState{},      // Detects useState mirroring props via useEffect
 			&NoStaleState{},        // Detects state updates without functional form
 			&NoInlineProps{},       // Detects inline objects/arrays/functions in JSX props
+			&DeepPropDrilling{},    // Detects props drilled through 3+ component levels
 			&PlaceholderRule{},     // Demonstration of multiple rules
 			// Add new rules here as they're implemented
 		},
@@ -55,4 +57,19 @@ func (r *Registry) RunAll(ast *parser.AST, resolver *analyzer.ModuleResolver) []
 // Count returns the number of registered rules
 func (r *Registry) Count() int {
 	return len(r.rules)
+}
+
+// RunGraph runs all graph-based rules on the dependency graph
+func (r *Registry) RunGraph(g *graph.Graph) []Issue {
+	var allIssues []Issue
+
+	for _, rule := range r.rules {
+		// Check if rule implements GraphRule interface
+		if graphRule, ok := rule.(GraphRule); ok {
+			issues := graphRule.CheckGraph(g)
+			allIssues = append(allIssues, issues...)
+		}
+	}
+
+	return allIssues
 }
