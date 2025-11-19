@@ -1,0 +1,88 @@
+{
+  "name": "react-analyzer",
+  "displayName": "React Analyzer",
+  "description": "Static analysis tool for React performance issues",
+  "version": "0.1.0",
+  "publisher": "react-analyzer",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "react",
+    "performance",
+    "hooks",
+    "memoization",
+    "optimization"
+  ],
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "reactAnalyzer.analyzeFile",
+        "title": "React Analyzer: Analyze Current File"
+      },
+      {
+        "command": "reactAnalyzer.analyzeWorkspace",
+        "title": "React Analyzer: Analyze Workspace"
+      },
+      {
+        "command": "reactAnalyzer.clearDiagnostics",
+        "title": "React Analyzer: Clear All Diagnostics"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "reactAnalyzerComponentTree",
+          "name": "React Components"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "React Analyzer",
+      "properties": {
+        "reactAnalyzer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable React Analyzer"
+        },
+        "reactAnalyzer.analyzeOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run analysis when files are saved"
+        },
+        "reactAnalyzer.cliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to react-analyzer CLI binary (leave empty to use bundled binary)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.44.0",
+    "typescript": "^5.1.6"
+  }
+}
