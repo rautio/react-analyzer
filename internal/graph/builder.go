@@ -472,9 +472,70 @@ func (b *Builder) findComponentID(componentName, filePath string) string {
 		}
 	}
 
-	// TODO: Search in imported files using resolver
-	// This requires tracking imports and resolving component definitions
+	// Search in imported files using resolver
+	return b.findComponentInImports(componentName, filePath)
+}
 
+// findComponentInImports searches for a component in imported files
+func (b *Builder) findComponentInImports(componentName, currentFile string) string {
+	// Get the current module to access its imports
+	modules := b.resolver.GetModules()
+	currentModule, exists := modules[currentFile]
+	if !exists {
+		return ""
+	}
+
+	// Search through all imports
+	for _, imp := range currentModule.Imports {
+		// Check if this import includes the component we're looking for
+
+		// Check default import: import MyComponent from './MyComponent'
+		if imp.Default == componentName {
+			resolvedPath, err := b.resolver.Resolve(currentFile, imp.Source)
+			if err != nil {
+				continue // Skip unresolved imports (external packages, etc.)
+			}
+
+			// Find component in the imported file
+			componentID := b.findComponentInFile(componentName, resolvedPath)
+			if componentID != "" {
+				return componentID
+			}
+		}
+
+		// Check named imports: import { MyComponent } from './components'
+		for _, named := range imp.Named {
+			// LocalName is what it's called in the current file
+			// ImportedName is what it's called in the source file
+			if named.LocalName == componentName {
+				resolvedPath, err := b.resolver.Resolve(currentFile, imp.Source)
+				if err != nil {
+					continue
+				}
+
+				// Search for the original exported name in the imported file
+				componentID := b.findComponentInFile(named.ImportedName, resolvedPath)
+				if componentID != "" {
+					return componentID
+				}
+			}
+		}
+
+		// Check namespace imports: import * as Components from './components'
+		// Usage: <Components.MyComponent />
+		// This would require parsing the member access, which we'll handle separately
+	}
+
+	return ""
+}
+
+// findComponentInFile searches for a component by name in a specific file
+func (b *Builder) findComponentInFile(componentName, filePath string) string {
+	for id, comp := range b.graph.ComponentNodes {
+		if comp.Name == componentName && comp.Location.FilePath == filePath {
+			return id
+		}
+	}
 	return ""
 }
 

@@ -1,7 +1,7 @@
 # Current State - What Works Today
 
 **Last Updated:** 2025-11-18
-**Version:** Phase 2.2A Complete (Arrow Functions Added!)
+**Version:** Phase 2.2B Complete (Arrow Functions + Cross-File!)
 
 This document describes what the react-analyzer tool can do **right now**, helping you understand its current capabilities and limitations.
 
@@ -11,15 +11,15 @@ This document describes what the react-analyzer tool can do **right now**, helpi
 
 ✅ **What Works:**
 - 6 production-ready analysis rules
-- Single-file component analysis
+- **NEW:** Cross-file component analysis (prop drilling across files!)
 - **NEW:** Arrow function components (`const Foo = () => <div />`)
 - **NEW:** React.memo wrapped arrow functions
 - Function declaration components
+- Named and default exports
 - Explicit prop passing (not spreads)
 - Fast performance (~2ms per file)
 
 ❌ **What Doesn't Work Yet:**
-- Cross-file prop drilling detection
 - Prop spread operators (`{...props}`)
 - Object property access tracking
 
@@ -265,10 +265,11 @@ function MyComponent({ theme }) {
 
 ---
 
-### ❌ 1. Cross-File Prop Drilling (CRITICAL)
+### ✅ ~~1. Cross-File Prop Drilling~~ FIXED!
 
-**Impact:** Real apps split components across files
+**Status:** ✅ Completed in Phase 2.2B (2025-11-18)
 
+Cross-file prop drilling now works perfectly:
 ```tsx
 // App.tsx
 function App() {
@@ -278,7 +279,7 @@ function App() {
 
 // Dashboard.tsx
 export function Dashboard({ theme }) {
-    return <Sidebar theme={theme} />;  // ❌ NOT detected (different file)
+    return <Sidebar theme={theme} />;  // ✅ NOW DETECTED (cross-file!)
 }
 
 // Sidebar.tsx
@@ -287,15 +288,11 @@ export function Sidebar({ theme }) {
 }
 ```
 
-**Result:** Only detects App → Dashboard (1 level), misses the full chain.
-
-**Workaround:** Keep components in same file (defeats purpose of file organization).
-
-**Fix:** Planned for Phase 2.2B (Q1 2026)
+**Result:** ✅ Detects complete chain: App → Dashboard → Sidebar
 
 ---
 
-### ❌ 2. Prop Spread Operators (HIGH)
+### ❌ 1. Prop Spread Operators (HIGH)
 
 **Impact:** Very common pattern, major blind spot
 

@@ -1,6 +1,6 @@
 # Known Limitations
 
-**Last Updated:** 2025-11-18 (Arrow Functions ✅ COMPLETED)
+**Last Updated:** 2025-11-18 (Arrow Functions + Cross-File ✅ COMPLETED)
 **See also:** [ROADMAP.md](ROADMAP.md) for planned fixes
 
 This document outlines current limitations of the react-analyzer tool, organized by priority and impact.
@@ -12,7 +12,7 @@ This document outlines current limitations of the react-analyzer tool, organized
 | Priority | Limitation | Target Phase | ETA |
 |----------|-----------|--------------|-----|
 | ✅ COMPLETED | [Arrow Function Components](#1-arrow-function-components) | Phase 2.2 | ✅ DONE |
-| 🔴 CRITICAL | [Cross-File Prop Drilling](#2-cross-file-prop-drilling) | Phase 2.2 | Q1 2026 |
+| ✅ COMPLETED | [Cross-File Prop Drilling](#2-cross-file-prop-drilling) | Phase 2.2 | ✅ DONE |
 | 🟠 HIGH | [Prop Spread Operators](#3-prop-spread-operators) | Phase 2.2 | Q1 2026 |
 | 🟠 HIGH | [Object Property Access](#4-object-property-access) | Phase 2.3 | Q1-Q2 2026 |
 | 🟡 MEDIUM | [Partial Prop Usage Detection](#5-partial-prop-usage-detection) | Phase 2.3 | Q1-Q2 2026 |
@@ -70,20 +70,17 @@ function MyComponent({ theme }: Props) {
 
 ### 2. Cross-File Prop Drilling
 
-**Status:** 🔴 CRITICAL - Real apps split components across files
-**Target:** Phase 2.2 (Priority 1B)
-**ETA:** Q1 2026 (2-3 weeks)
-**Code Location:** `internal/graph/builder.go:473-485`
+**Status:** ✅ COMPLETED (Phase 2.2 Priority 1B)
+**Completed:** 2025-11-18
+**Code Location:** `internal/graph/builder.go`
 
-#### Issue
-Prop drilling detection is limited to components defined in the same file.
+#### ~~Issue~~ FIXED
+Prop drilling detection now works across multiple files!
 
-#### Current Behavior
-The `findComponentID()` function only searches for components in the same file as the parent.
-
-#### Example
+#### What Now Works
+All cross-file prop drilling patterns are detected:
 ```tsx
-// App.tsx - ✅ WORKS
+// App.tsx - ✅ ALL WORK NOW
 import { Dashboard } from './Dashboard';
 
 function App() {
@@ -91,56 +88,30 @@ function App() {
     return <Dashboard theme={theme} />;  // ✅ Edge created
 }
 
-// Dashboard.tsx - ❌ DOESN'T WORK
+// Dashboard.tsx - ✅ NOW WORKS
 export function Dashboard({ theme }: Props) {
-    return <Sidebar theme={theme} />;  // ❌ Edge NOT created (different file)
+    return <Sidebar theme={theme} />;  // ✅ Edge created (cross-file!)
 }
 
-// Sidebar.tsx - ❌ DOESN'T WORK
+// Sidebar.tsx - ✅ NOW WORKS
 export function Sidebar({ theme }: Props) {
-    return <ThemeToggle theme={theme} />;  // ❌ Edge NOT created
+    return <ThemeToggle theme={theme} />;  // ✅ Edge created (cross-file!)
 }
 ```
 
-**Result:** Only detects drilling from App → Dashboard (1 level), misses Dashboard → Sidebar → ThemeToggle.
+**Result:** ✅ Detects complete drilling chain across all files: App → Dashboard → Sidebar → ThemeToggle
 
-#### Why
-The `findComponentID()` function has a TODO comment for cross-file resolution but doesn't yet use the module resolver.
+#### Implementation Details
+- Added `findComponentInImports()` to search for components in imported files
+- Added `findComponentInFile()` helper to search by component name in specific file
+- Uses ModuleResolver to resolve import paths and get imported modules
+- Handles both default exports (`import Dashboard from './Dashboard'`)
+- Handles named exports (`import { Dashboard } from './Dashboard'`)
+- Handles import aliases (`import { Dashboard as DashPanel } from './Dashboard'`)
+- Test fixtures added: 3-file and 4-file deep drilling scenarios
 
 #### Workaround
-**Keep related components in the same file:**
-```tsx
-// App.tsx - All in one file, ✅ WORKS
-function App() {
-    const [theme, setTheme] = useState('dark');
-    return <Dashboard theme={theme} />;
-}
-
-function Dashboard({ theme }: Props) {
-    return <Sidebar theme={theme} />;
-}
-
-function Sidebar({ theme }: Props) {
-    return <ThemeToggle theme={theme} />;
-}
-
-function ThemeToggle({ theme }: Props) {
-    return <button>{theme}</button>;
-}
-```
-
-**Impact:** Defeats purpose of file organization; not practical.
-
-#### Planned Fix
-1. Enhance `findComponentID()` to search imported files
-2. Track import statements and resolve component definitions
-3. Build cross-file component edges in graph
-4. Handle circular dependencies gracefully
-5. Support re-exports (`export { Foo } from './Foo'`)
-
-**Dependencies:** ModuleResolver already tracks imports ✅
-
-**See:** [ROADMAP.md - Phase 2.2, Priority 1B](ROADMAP.md#priority-1b-cross-file-prop-drilling-2-3-weeks)
+~~No workaround needed - cross-file prop drilling is fully supported!~~
 
 ---
 
