@@ -34,9 +34,15 @@ func NewRegistry(cfg *config.Config) *Registry {
 	}
 }
 
-// GetRules returns all registered rules
+// GetRules returns all enabled rules
 func (r *Registry) GetRules() []Rule {
-	return r.rules
+	var enabledRules []Rule
+	for _, rule := range r.rules {
+		if r.isRuleEnabled(rule) {
+			enabledRules = append(enabledRules, rule)
+		}
+	}
+	return enabledRules
 }
 
 // GetRule returns a specific rule by name
@@ -49,11 +55,22 @@ func (r *Registry) GetRule(name string) (Rule, bool) {
 	return nil, false
 }
 
-// RunAll runs all registered rules on an AST and returns aggregated issues
+// isRuleEnabled checks if a rule is enabled in the configuration
+func (r *Registry) isRuleEnabled(rule Rule) bool {
+	ruleConfig := r.config.GetRuleConfig(rule.Name())
+	return ruleConfig.Enabled
+}
+
+// RunAll runs all enabled rules on an AST and returns aggregated issues
 func (r *Registry) RunAll(ast *parser.AST, resolver *analyzer.ModuleResolver) []Issue {
 	var allIssues []Issue
 
 	for _, rule := range r.rules {
+		// Skip disabled rules
+		if !r.isRuleEnabled(rule) {
+			continue
+		}
+
 		issues := rule.Check(ast, resolver)
 		allIssues = append(allIssues, issues...)
 	}
@@ -61,16 +78,27 @@ func (r *Registry) RunAll(ast *parser.AST, resolver *analyzer.ModuleResolver) []
 	return allIssues
 }
 
-// Count returns the number of registered rules
+// Count returns the number of enabled rules
 func (r *Registry) Count() int {
-	return len(r.rules)
+	count := 0
+	for _, rule := range r.rules {
+		if r.isRuleEnabled(rule) {
+			count++
+		}
+	}
+	return count
 }
 
-// RunGraph runs all graph-based rules on the dependency graph
+// RunGraph runs all enabled graph-based rules on the dependency graph
 func (r *Registry) RunGraph(g *graph.Graph) []Issue {
 	var allIssues []Issue
 
 	for _, rule := range r.rules {
+		// Skip disabled rules
+		if !r.isRuleEnabled(rule) {
+			continue
+		}
+
 		// Check if rule implements GraphRule interface
 		if graphRule, ok := rule.(GraphRule); ok {
 			// Special handling for configurable rules

@@ -447,3 +447,114 @@ func TestRun_EmptyDirectory(t *testing.T) {
 		t.Errorf("Expected 'no files found' error, got: %s", output)
 	}
 }
+
+func TestRun_RelativePathConfigLoading(t *testing.T) {
+	// Create a temp directory structure:
+	// tmpDir/
+	//   .rarc (config file)
+	//   nested/
+	//     test.tsx (file to analyze)
+	tmpDir, err := os.MkdirTemp("", "test-config-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create .rarc config that disables all rules except deep-prop-drilling
+	configContent := `{
+  "rules": {
+    "deep-prop-drilling": {
+      "enabled": true,
+      "options": {
+        "maxDepth": 2
+      }
+    },
+    "no-object-deps": {
+      "enabled": false
+    },
+    "no-inline-props": {
+      "enabled": false
+    }
+  }
+}`
+	configPath := filepath.Join(tmpDir, ".rarc")
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	// Create nested directory
+	nestedDir := filepath.Join(tmpDir, "nested")
+	if err := os.MkdirAll(nestedDir, 0755); err != nil {
+		t.Fatalf("Failed to create nested dir: %v", err)
+	}
+
+	// Create a test file with an object dependency
+	testFile := filepath.Join(nestedDir, "test.tsx")
+	testContent := `import React, { useEffect } from 'react';
+
+function MyComponent() {
+  const config = { api: 'test' };
+  useEffect(() => {
+    console.log(config.api);
+  }, [config]); // Object dependency - should NOT be flagged (rule disabled)
+  return <div>test</div>;
+}`
+	if err := os.WriteFile(testFile, []byte(testContent), 0644); err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+
+	// Save current directory
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	// Change to a different directory (parent of tmpDir)
+	if err := os.Chdir(filepath.Dir(tmpDir)); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Create relative path from current directory to test file
+	relPath, err := filepath.Rel(filepath.Dir(tmpDir), testFile)
+	if err != nil {
+		t.Fatalf("Failed to create relative path: %v", err)
+	}
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	opts := &Options{
+		Verbose: true, // Enable verbose to see config loading message
+		Quiet:   false,
+		NoColor: true,
+	}
+
+	exitCode := Run(relPath, opts)
+
+	// Restore stdout
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Read captured output
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	output := buf.String()
+
+	// Verify config was loaded (verbose mode should mention it)
+	if !strings.Contains(output, "Configuration loaded successfully") {
+		t.Errorf("Expected config to be loaded with relative path, got: %s", output)
+	}
+
+	// Verify no object-deps violation (rule should be disabled by config)
+	if strings.Contains(output, "no-object-deps") {
+		t.Errorf("Expected no-object-deps to be disabled by config, but it was reported: %s", output)
+	}
+
+	// Verify exit code is 0 (no violations since rules are disabled)
+	if exitCode != 0 {
+		t.Errorf("Expected exit code 0 (no violations), got %d. Output: %s", exitCode, output)
+	}
+}

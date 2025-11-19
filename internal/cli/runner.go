@@ -70,6 +70,14 @@ func Run(path string, opts *Options) int {
 	// Start timing
 	startTime := time.Now()
 
+	// Convert to absolute path for consistent config/module resolution
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		printError(fmt.Errorf("failed to resolve path: %v", err), opts.NoColor)
+		return 2
+	}
+	path = absPath
+
 	// Check if path exists
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
