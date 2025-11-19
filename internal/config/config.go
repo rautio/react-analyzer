@@ -95,10 +95,10 @@ func Load(startDir string) (*Config, error) {
 	return config, nil
 }
 
-// findConfigFile searches for .reactanalyzerrc.json starting from dir
+// findConfigFile searches for config files starting from dir
 // and walking up to the root directory
 func findConfigFile(dir string) (string, error) {
-	configNames := []string{".reactanalyzerrc.json", "react-analyzer.json"}
+	configNames := []string{".rarc", ".reactanalyzerrc.json", "react-analyzer.json"}
 
 	currentDir := dir
 	for {

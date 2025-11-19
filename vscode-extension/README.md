@@ -38,7 +38,7 @@ Static analysis extension for detecting React performance issues and antipattern
 
 ### Project Configuration
 
-Create a `.reactanalyzerrc.json` file in your project root to customize rules and path aliases:
+Create a `.rarc` (or `.reactanalyzerrc.json`) file in your project root to customize rules and path aliases:
 
 ```json
 {

@@ -1,10 +1,10 @@
 # Configuration Guide
 
-React Analyzer can be configured using a `.reactanalyzerrc.json` file in your project root.
+React Analyzer can be configured using a `.rarc` or `.reactanalyzerrc.json` file in your project root.
 
 ## Configuration File
 
-Create a `.reactanalyzerrc.json` file in your project root:
+Create a `.rarc` (shorthand) or `.reactanalyzerrc.json` file in your project root:
 
 ```json
 {
@@ -34,18 +34,20 @@ The configuration file supports two main sections:
 
 ### Rule Configuration
 The analyzer searches for rule configuration files in the following order:
-1. `.reactanalyzerrc.json` in the current directory
-2. `react-analyzer.json` in the current directory
-3. Walks up parent directories until a config is found
-4. Uses default configuration if no file is found
+1. `.rarc` in the current directory (shorthand)
+2. `.reactanalyzerrc.json` in the current directory
+3. `react-analyzer.json` in the current directory
+4. Walks up parent directories until a config is found
+5. Uses default configuration if no file is found
 
 ### Path Aliases (Module Resolution)
 The analyzer searches for path aliases in the following order (highest to lowest priority):
-1. `.reactanalyzerrc.json` - `compilerOptions.paths` section
-2. `.reactanalyzer.json` - `compilerOptions.paths` section (legacy)
-3. `tsconfig.json` - Falls back to TypeScript config if no analyzer config exists
+1. `.rarc` - `compilerOptions.paths` section (shorthand)
+2. `.reactanalyzerrc.json` - `compilerOptions.paths` section
+3. `.reactanalyzer.json` - `compilerOptions.paths` section (legacy)
+4. `tsconfig.json` - Falls back to TypeScript config if no analyzer config exists
 
-**Recommended:** Use `.reactanalyzerrc.json` for both rules and path aliases in a single file.
+**Recommended:** Use `.rarc` for a shorter filename, or `.reactanalyzerrc.json` for clarity.
 
 ## Compiler Options (Path Aliases)
 

@@ -149,9 +149,9 @@ If your project has a `tsconfig.json` with path mappings, React Analyzer will au
 }
 ```
 
-### Custom Configuration with `.reactanalyzerrc.json`
+### Custom Configuration with `.rarc`
 
-Create a `.reactanalyzerrc.json` file to configure both path aliases and rules:
+Create a `.rarc` (or `.reactanalyzerrc.json`) file to configure both path aliases and rules:
 
 ```json
 {
@@ -174,7 +174,7 @@ Create a `.reactanalyzerrc.json` file to configure both path aliases and rules:
 }
 ```
 
-**Priority:** `.reactanalyzerrc.json` > `.reactanalyzer.json` (legacy) > `tsconfig.json`
+**Priority:** `.rarc` > `.reactanalyzerrc.json` > `.reactanalyzer.json` (legacy) > `tsconfig.json`
 
 **Supported Import Formats:**
 ```tsx
@@ -184,7 +184,7 @@ import Component from './Component';            // ✅ Relative import (always s
 import React from 'react';                      // ✅ External package (skipped)
 ```
 
-See [Configuration Guide](docs/CONFIG.md) for complete documentation and `.reactanalyzerrc.example.json` for examples.
+See [Configuration Guide](docs/CONFIG.md) for complete documentation, `.rarc.example` or `.reactanalyzerrc.example.json` for examples.
 
 ## Troubleshooting
 

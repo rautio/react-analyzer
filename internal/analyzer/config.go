@@ -19,7 +19,7 @@ type Config struct {
 }
 
 // LoadPathAliases loads path aliases from configuration files
-// Priority: .reactanalyzerrc.json > .reactanalyzer.json > tsconfig.json
+// Priority: .rarc > .reactanalyzerrc.json > .reactanalyzer.json > tsconfig.json
 func LoadPathAliases(baseDir string) (map[string]string, error) {
 	aliases := make(map[string]string)
 
@@ -29,7 +29,7 @@ func LoadPathAliases(baseDir string) (map[string]string, error) {
 		aliases = tsAliases
 	}
 
-	// Try .reactanalyzer.json (medium priority, will override)
+	// Try .reactanalyzer.json (low priority, will override)
 	reactAnalyzerPath := filepath.Join(baseDir, ".reactanalyzer.json")
 	if configAliases, err := loadConfigFile(reactAnalyzerPath, baseDir); err == nil {
 		// Merge/override with .reactanalyzer.json aliases
@@ -38,10 +38,19 @@ func LoadPathAliases(baseDir string) (map[string]string, error) {
 		}
 	}
 
-	// Try .reactanalyzerrc.json (highest priority, will override)
+	// Try .reactanalyzerrc.json (medium priority, will override)
 	reactAnalyzerRcPath := filepath.Join(baseDir, ".reactanalyzerrc.json")
 	if configAliases, err := loadConfigFile(reactAnalyzerRcPath, baseDir); err == nil {
 		// Merge/override with .reactanalyzerrc.json aliases
+		for k, v := range configAliases {
+			aliases[k] = v
+		}
+	}
+
+	// Try .rarc (highest priority, will override)
+	rarcPath := filepath.Join(baseDir, ".rarc")
+	if configAliases, err := loadConfigFile(rarcPath, baseDir); err == nil {
+		// Merge/override with .rarc aliases
 		for k, v := range configAliases {
 			aliases[k] = v
 		}

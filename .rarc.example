@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@components/*": ["src/components/*"],
+      "@utils/*": ["src/utils/*"],
+      "~/*": ["./*"]
+    }
+  },
+  "rules": {
+    "deep-prop-drilling": {
+      "enabled": true,
+      "options": {
+        "maxDepth": 3
+      }
+    },
+    "no-object-deps": {
+      "enabled": true,
+      "options": {}
+    },
+    "unstable-props-to-memo": {
+      "enabled": true,
+      "options": {}
+    },
+    "no-derived-state": {
+      "enabled": true,
+      "options": {}
+    },
+    "no-stale-state": {
+      "enabled": true,
+      "options": {}
+    },
+    "no-inline-props": {
+      "enabled": true,
+      "options": {}
+    }
+  }
+}
