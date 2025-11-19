@@ -757,13 +757,47 @@ func (b *Builder) findComponentInImports(componentName, currentFile string) stri
 }
 
 // findComponentInFile searches for a component by name in a specific file
+// If the file hasn't been parsed yet, it will be parsed automatically
 func (b *Builder) findComponentInFile(componentName, filePath string) string {
+	// First check if component already exists in graph
 	for id, comp := range b.graph.ComponentNodes {
 		if comp.Name == componentName && comp.Location.FilePath == filePath {
 			return id
 		}
 	}
+
+	// Component not found - the file might not have been parsed yet
+	// Try to parse it now
+	modules := b.resolver.GetModules()
+	if _, exists := modules[filePath]; !exists {
+		// File not yet parsed - parse it now
+		module, err := b.resolver.GetModule(filePath)
+		if err != nil {
+			// Failed to parse, can't find component
+			return ""
+		}
+
+		// Now that we've parsed the file, build components from it
+		if module != nil {
+			b.buildComponentsFromModule(filePath, module)
+
+			// Search again in the newly built components
+			for id, comp := range b.graph.ComponentNodes {
+				if comp.Name == componentName && comp.Location.FilePath == filePath {
+					return id
+				}
+			}
+		}
+	}
+
 	return ""
+}
+
+// buildComponentsFromModule builds component nodes from a specific module
+// This is used when we need to lazily load an imported file
+func (b *Builder) buildComponentsFromModule(filePath string, module *analyzer.Module) {
+	// Build component nodes
+	b.buildComponentNodes(module)
 }
 
 func (b *Builder) handleUseStateWithPattern(useStateNode *parser.Node, pattern *parser.Node, component *ComponentNode, filePath string) {

@@ -209,6 +209,11 @@ func Run(path string, opts *Options) int {
 	if stats.FilesAnalyzed > 0 {
 		if opts.Verbose && !opts.JSON {
 			fmt.Println("\nBuilding dependency graph...")
+			modules := resolver.GetModules()
+			fmt.Printf("  Parsed modules: %d\n", len(modules))
+			for path := range modules {
+				fmt.Printf("    - %s\n", path)
+			}
 		}
 		graphStart := time.Now()
 
