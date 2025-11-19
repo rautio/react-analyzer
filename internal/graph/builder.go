@@ -320,6 +320,7 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 			if valueNode.Type() == "jsx_expression" {
 				// Check if value is a reference to parent's prop
 				for _, exprChild := range valueNode.Children() {
+					// Handle simple identifier: <Child theme={theme} />
 					if exprChild.Type() == "identifier" {
 						varName := exprChild.Text()
 
@@ -340,6 +341,33 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 							b.graph.AddEdge(edge)
 						}
 					}
+
+					// Handle member expression: <Child locale={settings.locale} />
+					if exprChild.Type() == "member_expression" {
+						objectName, propertyName := b.extractMemberExpression(exprChild)
+						if objectName != "" && propertyName != "" {
+							// Check if the object is a parent variable (state or prop)
+							if b.isParentVariable(objectName, parentComp) {
+								// Create or find virtual state node for this property
+								// This allows prop drilling detection to trace from object.property
+								b.ensurePropertyStateNode(objectName, propertyName, parentComp, filePath)
+
+								propsPassedToChild = append(propsPassedToChild, propName)
+
+								// Create "passes" edge with the property name
+								line, col := child.StartPoint()
+								edge := Edge{
+									ID:       GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
+									SourceID: parentComp.ID,
+									TargetID: childComp.ID,
+									Type:     EdgeTypePasses,
+									PropName: propName,
+									Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+								}
+								b.graph.AddEdge(edge)
+							}
+						}
+					}
 				}
 			}
 		}
@@ -354,6 +382,90 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 	if len(propsPassedToChild) > 0 {
 		parentComp.PropsPassedTo[childComp.ID] = propsPassedToChild
 	}
+}
+
+// extractMemberExpression extracts object and property names from a member_expression node
+// Example: settings.locale -> ("settings", "locale")
+// For nested expressions (config.settings.theme), returns the root object and full property path
+func (b *Builder) extractMemberExpression(memberExpr *parser.Node) (objectName string, propertyName string) {
+	if memberExpr.Type() != "member_expression" {
+		return "", ""
+	}
+
+	// Get the object (left side)
+	object := memberExpr.ChildByFieldName("object")
+	if object != nil && object.Type() == "identifier" {
+		objectName = object.Text()
+	}
+
+	// Get the property (right side)
+	property := memberExpr.ChildByFieldName("property")
+	if property != nil && property.Type() == "property_identifier" {
+		propertyName = property.Text()
+	}
+
+	return objectName, propertyName
+}
+
+// ensurePropertyStateNode creates a virtual state node for an object property
+// This enables prop drilling detection to track properties like settings.locale as separate flows
+func (b *Builder) ensurePropertyStateNode(objectName string, propertyName string, component *ComponentNode, filePath string) {
+	// Generate ID for the virtual state node (using property name as the state name)
+	virtualStateID := GenerateStateID(component.Name, propertyName, filePath, component.Location.Line)
+
+	// Check if this virtual state already exists
+	if _, exists := b.graph.StateNodes[virtualStateID]; exists {
+		return // Already created
+	}
+
+	// Find the parent state node (the object)
+	var parentStateID string
+	for _, stateID := range component.StateNodes {
+		if stateNode, exists := b.graph.StateNodes[stateID]; exists {
+			if stateNode.Name == objectName {
+				parentStateID = stateID
+				break
+			}
+		}
+	}
+
+	if parentStateID == "" {
+		// Parent state not found, can't create virtual state
+		return
+	}
+
+	// Create virtual state node for the property
+	virtualStateNode := &StateNode{
+		ID:       virtualStateID,
+		Name:     propertyName,
+		Type:     StateTypeDerived, // Mark as derived from parent object
+		DataType: DataTypeUnknown,
+		Location: component.Location,
+		Mutable:  false, // Properties accessed via member expression are typically read-only
+	}
+
+	b.graph.AddStateNode(virtualStateNode)
+	component.StateNodes = append(component.StateNodes, virtualStateID)
+
+	// Create "derives" edge from parent state to virtual state
+	derivesEdge := Edge{
+		ID:       GenerateEdgeID(EdgeTypeDerives, parentStateID, virtualStateID),
+		SourceID: parentStateID,
+		TargetID: virtualStateID,
+		Type:     EdgeTypeDerives,
+		Location: component.Location,
+	}
+	b.graph.AddEdge(derivesEdge)
+
+	// Create "defines" edge from component to virtual state
+	definesEdge := Edge{
+		ID:       GenerateEdgeID(EdgeTypeDefines, component.ID, virtualStateID),
+		SourceID: component.ID,
+		TargetID: virtualStateID,
+		Type:     EdgeTypeDefines,
+		Location: component.Location,
+	}
+	b.graph.AddEdge(definesEdge)
 }
 
 // handleSpreadAttribute processes JSX spread attributes like <Child {...props} />

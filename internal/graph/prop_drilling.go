@@ -81,9 +81,11 @@ func findPropOrigins(g *Graph) map[string]*StateNode {
 
 	for id, stateNode := range g.StateNodes {
 		// Props that are defined as state are origins
+		// Includes derived state (properties of state objects like settings.locale)
 		if stateNode.Type == StateTypeUseState ||
 			stateNode.Type == StateTypeUseReducer ||
-			stateNode.Type == StateTypeContext {
+			stateNode.Type == StateTypeContext ||
+			stateNode.Type == StateTypeDerived {
 			origins[id] = stateNode
 		}
 	}
