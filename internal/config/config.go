@@ -123,6 +123,15 @@ func findConfigFile(dir string) (string, error) {
 
 // mergeConfig merges user config into base config
 func mergeConfig(base *Config, user *Config) {
+	// Merge compiler options
+	if user.CompilerOptions.BaseURL != "" {
+		base.CompilerOptions.BaseURL = user.CompilerOptions.BaseURL
+	}
+	if user.CompilerOptions.Paths != nil {
+		base.CompilerOptions.Paths = user.CompilerOptions.Paths
+	}
+
+	// Merge rules
 	for ruleName, userRuleConfig := range user.Rules {
 		baseRuleConfig, exists := base.Rules[ruleName]
 		if !exists {
