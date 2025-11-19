@@ -13,7 +13,7 @@ This document outlines current limitations of the react-analyzer tool, organized
 |----------|-----------|--------------|-----|
 | ✅ COMPLETED | [Arrow Function Components](#1-arrow-function-components) | Phase 2.2 | ✅ DONE |
 | ✅ COMPLETED | [Cross-File Prop Drilling](#2-cross-file-prop-drilling) | Phase 2.2 | ✅ DONE |
-| 🟠 HIGH | [Prop Spread Operators](#3-prop-spread-operators) | Phase 2.2 | Q1 2026 |
+| 🟡 PARTIAL | [Prop Spread Operators](#3-prop-spread-operators) | Phase 2.3 | Q1-Q2 2026 |
 | 🟠 HIGH | [Object Property Access](#4-object-property-access) | Phase 2.3 | Q1-Q2 2026 |
 | 🟡 MEDIUM | [Partial Prop Usage Detection](#5-partial-prop-usage-detection) | Phase 2.3 | Q1-Q2 2026 |
 | 🟡 MEDIUM | [Renamed Props](#6-renamed-props) | Phase 2.4 | Q2 2026 |
@@ -121,59 +121,63 @@ Common patterns that significantly limit the tool's usefulness.
 
 ### 3. Prop Spread Operators
 
-**Status:** 🟠 HIGH - Very common React pattern
-**Target:** Phase 2.2 (Priority 1C)
-**ETA:** Q1 2026 (2-3 weeks)
-**Test Fixture:** `test/fixtures/prop-drilling/PropSpread.tsx` (currently fails)
+**Status:** 🟡 PARTIAL - Infrastructure implemented (Phase 2.2C)
+**Completed:** Basic detection (2025-11-18)
+**Target:** Full support in Phase 2.3
+**Code Location:** `internal/graph/builder.go:339-428`
 
-#### Issue
-Props passed via spread operators are not tracked.
-
-#### Current Behavior
-Spread operators (`{...props}`) are ignored, so drilling through spreads is not detected.
-
-#### Example
+#### What Works (Partial Support)
+Basic spread infrastructure is implemented:
 ```tsx
-function Container(props: Config) {
-    return <Panel {...props} />;  // ❌ Not tracked
+function Wrapper(props: any) {
+    return <Child {...props} />;  // ✅ Spread detected
+}
+```
+
+**Implemented:**
+- ✅ Detects `jsx_spread_attribute` nodes
+- ✅ Creates edges for identified spread variables
+- ✅ Handles spreading parent's props object
+- ✅ Handles spreading parent's state variables
+
+#### What Doesn't Work Yet
+Full tracking through non-destructured props:
+```tsx
+function Container(props: Config) {  // ❌ Props not destructured
+    return <Panel {...props} />;     // ❌ Can't infer individual props
 }
 
 function Panel(props: Config) {
-    return <Settings {...props} />;  // ❌ Not tracked
+    return <Settings {...props} />;
 }
 
 function Settings({ apiUrl, timeout }: Config) {
-    return <div>{apiUrl}</div>;  // Uses individual props
+    return <div>{apiUrl}</div>;
 }
 ```
 
-**Result:** No violation detected, even though `apiUrl` and `timeout` are drilled through 3 levels.
+**Result:** Can't track `apiUrl` and `timeout` through the chain without TypeScript type analysis.
 
-#### Why
-The edge detection in `processJSXElement()` only handles explicit prop assignments like `<Child prop={value} />`, not `jsx_spread_attribute` nodes.
+#### Why Full Support is Complex
+Without destructuring, we can't determine which individual props exist in `props: Config`. This requires:
+- TypeScript AST type resolution
+- Object property tracking
+- Advanced data flow analysis
 
 #### Workaround
-**Pass props explicitly:**
+**Use destructured props:**
 ```tsx
-// Instead of:
-<Panel {...props} />
+// ✅ This pattern works
+function Container({ apiUrl, timeout }: Config) {
+    return <Panel apiUrl={apiUrl} timeout={timeout} />;
+}
 
-// Use:
+// Or pass explicitly:
 <Panel apiUrl={props.apiUrl} timeout={props.timeout} />
 ```
 
-**Impact:** Makes code more verbose; defeats DRY principle.
-
-#### Planned Fix
-1. Detect `jsx_spread_attribute` nodes in JSX
-2. Track which props are included in the spread
-3. Create edges for all props in the spread object
-4. Handle partial spreads: `<Child {...rest} theme={theme} />`
-5. Support spread with destructuring
-
-**Challenges:** May need TypeScript type information to know what's in spread.
-
-**See:** [ROADMAP.md - Phase 2.2, Priority 1C](ROADMAP.md#priority-1c-prop-spread-operators-2-3-weeks)
+#### Next Steps
+Full spread support moved to Phase 2.3, combined with object property access detection (similar challenges).
 
 ---
 

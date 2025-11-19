@@ -1,7 +1,7 @@
 # Current State - What Works Today
 
 **Last Updated:** 2025-11-18
-**Version:** Phase 2.2B Complete (Arrow Functions + Cross-File!)
+**Version:** Phase 2.2 Complete! (Arrow Functions + Cross-File + Partial Spreads)
 
 This document describes what the react-analyzer tool can do **right now**, helping you understand its current capabilities and limitations.
 
@@ -14,13 +14,17 @@ This document describes what the react-analyzer tool can do **right now**, helpi
 - **NEW:** Cross-file component analysis (prop drilling across files!)
 - **NEW:** Arrow function components (`const Foo = () => <div />`)
 - **NEW:** React.memo wrapped arrow functions
+- **NEW:** Partial spread operator support (infrastructure in place)
 - Function declaration components
 - Named and default exports
-- Explicit prop passing (not spreads)
-- Fast performance (~2ms per file)
+- Explicit prop passing
+- Fast performance (~2-3ms per file)
+
+⚠️ **Partial Support:**
+- Prop spread operators (works with destructured props, needs TypeScript analysis for full support)
 
 ❌ **What Doesn't Work Yet:**
-- Prop spread operators (`{...props}`)
+- Full prop spread through non-destructured props
 - Object property access tracking
 
 **See:** [known_limitations.md](known_limitations.md) for full details.

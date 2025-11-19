@@ -280,55 +280,150 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 
 	// Iterate through direct children of opening element for attributes
 	for _, child := range openingElement.Children() {
-		if child.Type() != "jsx_attribute" {
-			continue
-		}
-
-		// Get attribute name (it's a property_identifier child)
-		var propName string
-		var valueNode *parser.Node
-		for _, attrChild := range child.Children() {
-			if attrChild.Type() == "property_identifier" {
-				propName = attrChild.Text()
-			} else if attrChild.Type() == "jsx_expression" {
-				valueNode = attrChild
+		// Handle regular attributes: <Child prop={value} />
+		if child.Type() == "jsx_attribute" {
+			// Get attribute name (it's a property_identifier child)
+			var propName string
+			var valueNode *parser.Node
+			for _, attrChild := range child.Children() {
+				if attrChild.Type() == "property_identifier" {
+					propName = attrChild.Text()
+				} else if attrChild.Type() == "jsx_expression" {
+					valueNode = attrChild
+				}
 			}
-		}
 
-		if propName == "" || valueNode == nil {
-			continue
-		}
+			if propName == "" || valueNode == nil {
+				continue
+			}
 
-		if valueNode.Type() == "jsx_expression" {
-			// Check if value is a reference to parent's prop
-			for _, exprChild := range valueNode.Children() {
-				if exprChild.Type() == "identifier" {
-					varName := exprChild.Text()
+			if valueNode.Type() == "jsx_expression" {
+				// Check if value is a reference to parent's prop
+				for _, exprChild := range valueNode.Children() {
+					if exprChild.Type() == "identifier" {
+						varName := exprChild.Text()
 
-					// Check if this identifier matches a prop or state from parent
-					if b.isParentVariable(varName, parentComp) {
-						propsPassedToChild = append(propsPassedToChild, propName)
+						// Check if this identifier matches a prop or state from parent
+						if b.isParentVariable(varName, parentComp) {
+							propsPassedToChild = append(propsPassedToChild, propName)
 
-						// Create "passes" edge (include propName in ID to allow multiple props)
-						line, col := child.StartPoint()
-						edge := Edge{
-							ID:       GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
-							SourceID: parentComp.ID,
-							TargetID: childComp.ID,
-							Type:     EdgeTypePasses,
-							PropName: propName,
-							Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+							// Create "passes" edge (include propName in ID to allow multiple props)
+							line, col := child.StartPoint()
+							edge := Edge{
+								ID:       GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
+								SourceID: parentComp.ID,
+								TargetID: childComp.ID,
+								Type:     EdgeTypePasses,
+								PropName: propName,
+								Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+							}
+							b.graph.AddEdge(edge)
 						}
-						b.graph.AddEdge(edge)
 					}
 				}
 			}
+		}
+
+		// Handle spread attributes: <Child {...props} />
+		if child.Type() == "jsx_spread_attribute" {
+			b.handleSpreadAttribute(child, parentComp, childComp, filePath, &propsPassedToChild)
 		}
 	}
 
 	// Update parent's PropsPassedTo map
 	if len(propsPassedToChild) > 0 {
 		parentComp.PropsPassedTo[childComp.ID] = propsPassedToChild
+	}
+}
+
+// handleSpreadAttribute processes JSX spread attributes like <Child {...props} />
+func (b *Builder) handleSpreadAttribute(spreadNode *parser.Node, parentComp *ComponentNode, childComp *ComponentNode, filePath string, propsPassedToChild *[]string) {
+	// Get the expression being spread
+	// JSX spread attribute structure: jsx_spread_attribute -> ... -> identifier
+	var spreadIdentifier string
+
+	// Walk children to find the identifier
+	for _, child := range spreadNode.Children() {
+		if child.Type() == "identifier" {
+			spreadIdentifier = child.Text()
+			break
+		}
+		// Also check nested children (for cases like {...})
+		for _, grandchild := range child.Children() {
+			if grandchild.Type() == "identifier" {
+				spreadIdentifier = grandchild.Text()
+				break
+			}
+		}
+		if spreadIdentifier != "" {
+			break
+		}
+	}
+
+	if spreadIdentifier == "" {
+		return
+	}
+
+	// Check if the spread identifier is the parent's props object
+	// This handles cases like: function Parent(props) { return <Child {...props} /> }
+	isParentPropsObject := false
+	for _, prop := range parentComp.Props {
+		if prop.Name == spreadIdentifier && prop.Type == DataTypeObject {
+			isParentPropsObject = true
+			break
+		}
+	}
+
+	// Check if it's a parent's state or prop variable
+	isParentVariable := b.isParentVariable(spreadIdentifier, parentComp)
+
+	if isParentPropsObject {
+		// Spreading the entire props object - we assume all props are being passed
+		// Since we can't know which individual props without more analysis,
+		// we create edges for all of the child's props
+		for _, childProp := range childComp.Props {
+			// Skip object-type props
+			if childProp.Type == DataTypeObject {
+				continue
+			}
+
+			*propsPassedToChild = append(*propsPassedToChild, childProp.Name)
+
+			// Create edge for this prop
+			line, col := spreadNode.StartPoint()
+			edge := Edge{
+				ID:       GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, childProp.Name),
+				SourceID: parentComp.ID,
+				TargetID: childComp.ID,
+				Type:     EdgeTypePasses,
+				PropName: childProp.Name,
+				Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+			}
+			b.graph.AddEdge(edge)
+		}
+	} else if isParentVariable {
+		// Spreading a parent's state or prop (e.g., {...config} where config is state)
+		// We assume all properties are being passed to all of child's props
+		for _, childProp := range childComp.Props {
+			// Skip object-type props
+			if childProp.Type == DataTypeObject {
+				continue
+			}
+
+			*propsPassedToChild = append(*propsPassedToChild, childProp.Name)
+
+			// Create edge for this prop
+			line, col := spreadNode.StartPoint()
+			edge := Edge{
+				ID:       GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, childProp.Name),
+				SourceID: parentComp.ID,
+				TargetID: childComp.ID,
+				Type:     EdgeTypePasses,
+				PropName: childProp.Name,
+				Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+			}
+			b.graph.AddEdge(edge)
+		}
 	}
 }
 
