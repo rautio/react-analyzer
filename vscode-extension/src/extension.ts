@@ -99,6 +99,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
 /**
  * Analyze a single file
+ * Note: To enable cross-file analysis (like prop drilling detection),
+ * we analyze the directory containing the file, not just the file itself
  */
 async function analyzeFile(filePath: string): Promise<void> {
     try {
@@ -109,17 +111,28 @@ async function analyzeFile(filePath: string): Promise<void> {
                 cancellable: false,
             },
             async (progress) => {
-                progress.report({ message: 'Analyzing file...' });
+                progress.report({ message: 'Analyzing project...' });
 
-                const result = await cliRunner.analyze(filePath, false);
+                // Get the directory containing the file
+                // For cross-file analysis, we need to analyze all files in the directory
+                const path = require('path');
+                const dirPath = path.dirname(filePath);
+
+                // Analyze the entire directory to enable cross-file graph analysis
+                const result = await cliRunner.analyze(dirPath, false);
                 diagnosticsProvider.updateDiagnostics(result.issues);
 
-                const issueCount = result.issues.length;
+                // Filter issues to only show those for files in the same directory
+                const issuesInDir = result.issues.filter(issue =>
+                    issue.filePath.startsWith(dirPath)
+                );
+
+                const issueCount = issuesInDir.length;
                 if (issueCount === 0) {
-                    vscode.window.showInformationMessage('✓ No issues found');
+                    vscode.window.showInformationMessage(`✓ No issues found in directory (${result.stats.filesAnalyzed} files analyzed)`);
                 } else {
                     const plural = issueCount === 1 ? 'issue' : 'issues';
-                    vscode.window.showWarningMessage(`Found ${issueCount} ${plural}`);
+                    vscode.window.showWarningMessage(`Found ${issueCount} ${plural} in ${result.stats.filesWithIssues} files`);
                 }
             }
         );

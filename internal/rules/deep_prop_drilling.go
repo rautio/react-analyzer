@@ -34,20 +34,32 @@ func (r *DeepPropDrilling) CheckGraph(g *graph.Graph) []Issue {
 
 	var issues []Issue
 	for _, v := range violations {
+		// Create issue at origin (where state is defined)
 		issues = append(issues, Issue{
 			Rule:     r.Name(),
 			FilePath: v.Origin.FilePath,
 			Line:     v.Origin.Line,
 			Column:   v.Origin.Column,
-			Message:  r.formatMessage(v),
+			Message:  r.formatOriginMessage(v),
 		})
+
+		// Create issues at each passthrough component
+		for i, comp := range v.PassthroughComponents {
+			issues = append(issues, Issue{
+				Rule:     r.Name(),
+				FilePath: comp.FilePath,
+				Line:     comp.Line,
+				Column:   0, // Start of line
+				Message:  r.formatPassthroughMessage(v, i),
+			})
+		}
 	}
 
 	return issues
 }
 
-// formatMessage creates a user-friendly error message
-func (r *DeepPropDrilling) formatMessage(v graph.PropDrillingViolation) string {
+// formatOriginMessage creates message for the state origin location
+func (r *DeepPropDrilling) formatOriginMessage(v graph.PropDrillingViolation) string {
 	// Build passthrough path string
 	path := ""
 	for i, comp := range v.PassthroughComponents {
@@ -57,21 +69,29 @@ func (r *DeepPropDrilling) formatMessage(v graph.PropDrillingViolation) string {
 		path += comp.Name
 	}
 
-	if path == "" {
-		// No passthrough components (shouldn't happen for depth >= 3, but safety check)
-		return fmt.Sprintf(
-			"Prop '%s' is drilled through %d component levels. %s",
-			v.PropName,
-			v.Depth,
-			v.Recommendation,
-		)
-	}
-
 	return fmt.Sprintf(
-		"Prop '%s' is drilled through %d component levels (%s). %s",
+		"State '%s' is drilled through %d component levels (%s). %s",
 		v.PropName,
 		v.Depth,
 		path,
+		v.Recommendation,
+	)
+}
+
+// formatPassthroughMessage creates message for passthrough component locations
+func (r *DeepPropDrilling) formatPassthroughMessage(v graph.PropDrillingViolation, componentIndex int) string {
+	comp := v.PassthroughComponents[componentIndex]
+
+	// Show position in the chain
+	position := fmt.Sprintf("passthrough %d of %d", componentIndex+1, len(v.PassthroughComponents))
+
+	return fmt.Sprintf(
+		"Component '%s' passes prop '%s' without using it (%s). This prop originates from %s and is drilled through %d levels. %s",
+		comp.Name,
+		v.PropName,
+		position,
+		v.Origin.Component,
+		v.Depth,
 		v.Recommendation,
 	)
 }
