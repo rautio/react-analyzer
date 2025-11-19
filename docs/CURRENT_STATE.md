@@ -1,7 +1,7 @@
 # Current State - What Works Today
 
 **Last Updated:** 2025-11-18
-**Version:** Phase 2.1 Complete
+**Version:** Phase 2.2A Complete (Arrow Functions Added!)
 
 This document describes what the react-analyzer tool can do **right now**, helping you understand its current capabilities and limitations.
 
@@ -12,12 +12,13 @@ This document describes what the react-analyzer tool can do **right now**, helpi
 ✅ **What Works:**
 - 6 production-ready analysis rules
 - Single-file component analysis
-- Function declaration components only
+- **NEW:** Arrow function components (`const Foo = () => <div />`)
+- **NEW:** React.memo wrapped arrow functions
+- Function declaration components
 - Explicit prop passing (not spreads)
 - Fast performance (~2ms per file)
 
 ❌ **What Doesn't Work Yet:**
-- Arrow function components (`const Foo = () => <div />`)
 - Cross-file prop drilling detection
 - Prop spread operators (`{...props}`)
 - Object property access tracking
@@ -34,8 +35,10 @@ The analyzer builds a complete graph of your React application:
 
 **Components:**
 - ✅ Detects function declaration components
+- ✅ **NEW:** Detects arrow function components (`const Foo = () => ...`)
+- ✅ **NEW:** Detects React.memo wrapped arrow functions
 - ✅ Tracks component hierarchy (parent-child relationships)
-- ✅ Extracts prop definitions from parameters
+- ✅ Extracts prop definitions from parameters (both function and arrow)
 - ✅ Identifies React.memo usage
 
 **State:**
@@ -242,29 +245,27 @@ function Display() {
 
 See [known_limitations.md](known_limitations.md) for full details. Here are the critical gaps:
 
-### ❌ 1. Arrow Function Components (CRITICAL)
+### ✅ ~~1. Arrow Function Components~~ FIXED!
 
-**Impact:** Misses 60-80% of modern React components
+**Status:** ✅ Completed in Phase 2.2A (2025-11-18)
 
+All arrow function patterns now work:
 ```tsx
-// ❌ NOT DETECTED
+// ✅ ALL NOW DETECTED
 const MyComponent = ({ theme }) => {
     return <div className={theme}>Content</div>;
 };
 
-// ✅ DETECTED
+const MemoComponent = memo(() => <div />);
+
 function MyComponent({ theme }) {
     return <div className={theme}>Content</div>;
 }
 ```
 
-**Workaround:** Convert arrow functions to function declarations.
-
-**Fix:** Planned for Phase 2.2 (Q1 2026)
-
 ---
 
-### ❌ 2. Cross-File Prop Drilling (CRITICAL)
+### ❌ 1. Cross-File Prop Drilling (CRITICAL)
 
 **Impact:** Real apps split components across files
 
@@ -290,11 +291,11 @@ export function Sidebar({ theme }) {
 
 **Workaround:** Keep components in same file (defeats purpose of file organization).
 
-**Fix:** Planned for Phase 2.2 (Q1 2026)
+**Fix:** Planned for Phase 2.2B (Q1 2026)
 
 ---
 
-### ❌ 3. Prop Spread Operators (HIGH)
+### ❌ 2. Prop Spread Operators (HIGH)
 
 **Impact:** Very common pattern, major blind spot
 

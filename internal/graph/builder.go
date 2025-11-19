@@ -101,8 +101,44 @@ func (b *Builder) buildComponentNodes(module *analyzer.Module) error {
 			b.graph.AddComponentNode(compNode)
 		}
 
-		// TODO: Handle arrow function components (const Foo = () => {})
-		// This requires traversing variable_declarator nodes
+		// Handle arrow function components (const Foo = () => {})
+		if nodeType == "variable_declarator" {
+			componentName := b.getComponentNameFromArrowFunction(node)
+			if componentName == "" || !isReactComponent(componentName) {
+				return true
+			}
+
+			line, col := node.StartPoint()
+			componentID := GenerateComponentID(componentName, module.FilePath, line+1)
+
+			// Check if component is memoized from symbol table
+			isMemoized := false
+			if symbol, exists := module.Symbols[componentName]; exists {
+				isMemoized = symbol.IsMemoized
+			}
+
+			// Extract props from arrow function
+			arrowFunc := b.getArrowFunctionNode(node)
+			if arrowFunc == nil {
+				return true
+			}
+			props := b.extractPropsFromArrowFunction(arrowFunc)
+
+			compNode := &ComponentNode{
+				ID:            componentID,
+				Name:          componentName,
+				Type:          ComponentTypeFunction,
+				Location:      Location{FilePath: module.FilePath, Line: line + 1, Column: col, Component: componentName},
+				IsMemoized:    isMemoized,
+				StateNodes:    []string{},
+				ConsumedState: []string{},
+				Children:      []string{},
+				Props:         props,
+				PropsPassedTo: make(map[string][]string),
+			}
+
+			b.graph.AddComponentNode(compNode)
+		}
 
 		return true
 	})
@@ -118,23 +154,9 @@ func (b *Builder) buildStateNodes(module *analyzer.Module) error {
 
 	ast := module.AST
 
-	// Track current component context
-	var currentComponent *ComponentNode
-
-	ast.Root.Walk(func(node *parser.Node) bool {
+	// Use helper to process nodes with proper component context
+	b.walkWithComponentContext(ast, module.FilePath, func(node *parser.Node, currentComponent *ComponentNode) bool {
 		nodeType := node.Type()
-
-		// Track which component we're in
-		if nodeType == "function_declaration" {
-			componentName := b.getComponentNameFromFunction(node)
-			if componentName != "" && isReactComponent(componentName) {
-				line, _ := node.StartPoint()
-				componentID := GenerateComponentID(componentName, module.FilePath, line+1)
-				if comp, exists := b.graph.ComponentNodes[componentID]; exists {
-					currentComponent = comp
-				}
-			}
-		}
 
 		// Look for variable_declarator with useState: const [count, setCount] = useState(0)
 		if nodeType == "variable_declarator" && currentComponent != nil {
@@ -164,23 +186,9 @@ func (b *Builder) buildComponentHierarchy(module *analyzer.Module) error {
 
 	ast := module.AST
 
-	// Track current component context
-	var currentComponent *ComponentNode
-
-	ast.Root.Walk(func(node *parser.Node) bool {
+	// Use helper to process nodes with proper component context
+	b.walkWithComponentContext(ast, module.FilePath, func(node *parser.Node, currentComponent *ComponentNode) bool {
 		nodeType := node.Type()
-
-		// Track which component we're in
-		if nodeType == "function_declaration" {
-			componentName := b.getComponentNameFromFunction(node)
-			if componentName != "" && isReactComponent(componentName) {
-				line, _ := node.StartPoint()
-				componentID := GenerateComponentID(componentName, module.FilePath, line+1)
-				if comp, exists := b.graph.ComponentNodes[componentID]; exists {
-					currentComponent = comp
-				}
-			}
-		}
 
 		// Look for JSX elements (child component usage)
 		if (nodeType == "jsx_element" || nodeType == "jsx_self_closing_element") && currentComponent != nil {
@@ -216,23 +224,9 @@ func (b *Builder) buildPropPassingEdges(module *analyzer.Module) error {
 
 	ast := module.AST
 
-	// Track current component context
-	var currentComponent *ComponentNode
-
-	ast.Root.Walk(func(node *parser.Node) bool {
+	// Use helper to process nodes with proper component context
+	b.walkWithComponentContext(ast, module.FilePath, func(node *parser.Node, currentComponent *ComponentNode) bool {
 		nodeType := node.Type()
-
-		// Track which component we're in
-		if nodeType == "function_declaration" {
-			componentName := b.getComponentNameFromFunction(node)
-			if componentName != "" && isReactComponent(componentName) {
-				line, _ := node.StartPoint()
-				componentID := GenerateComponentID(componentName, module.FilePath, line+1)
-				if comp, exists := b.graph.ComponentNodes[componentID]; exists {
-					currentComponent = comp
-				}
-			}
-		}
 
 		// Look for JSX elements (child component usage)
 		if (nodeType == "jsx_element" || nodeType == "jsx_self_closing_element") && currentComponent != nil {
@@ -526,6 +520,212 @@ func (b *Builder) handleUseStateWithPattern(useStateNode *parser.Node, pattern *
 	b.graph.AddEdge(edge)
 }
 
+// getComponentNameFromArrowFunction extracts component name from arrow function variable declarator
+func (b *Builder) getComponentNameFromArrowFunction(node *parser.Node) string {
+	if node.Type() != "variable_declarator" {
+		return ""
+	}
+
+	// Get the name field (identifier)
+	nameNode := node.ChildByFieldName("name")
+	if nameNode == nil {
+		return ""
+	}
+
+	// Must be an identifier
+	if nameNode.Type() != "identifier" {
+		return ""
+	}
+
+	componentName := nameNode.Text()
+
+	// Check if value is an arrow function (or React.memo wrapping arrow function)
+	valueNode := node.ChildByFieldName("value")
+	if valueNode == nil {
+		return ""
+	}
+
+	// Check if it's directly an arrow function or wrapped in React.memo/memo
+	if !b.isArrowFunctionComponent(valueNode) {
+		return ""
+	}
+
+	return componentName
+}
+
+// isArrowFunctionComponent checks if a node is an arrow function or React.memo wrapping one
+func (b *Builder) isArrowFunctionComponent(node *parser.Node) bool {
+	if node == nil {
+		return false
+	}
+
+	// Direct arrow function
+	if node.Type() == "arrow_function" {
+		return true
+	}
+
+	// React.memo(...) or memo(...) wrapping arrow function
+	if node.Type() == "call_expression" {
+		// Get the function being called
+		funcNode := node.ChildByFieldName("function")
+		if funcNode == nil {
+			return false
+		}
+
+		funcText := funcNode.Text()
+		// Check if it's memo or React.memo
+		if funcText == "memo" || funcText == "React.memo" {
+			// Get arguments
+			argsNode := node.ChildByFieldName("arguments")
+			if argsNode == nil {
+				return false
+			}
+
+			// Check if first argument is arrow function
+			for _, child := range argsNode.Children() {
+				if child.Type() == "arrow_function" {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// getArrowFunctionNode gets the arrow function node, unwrapping React.memo if needed
+func (b *Builder) getArrowFunctionNode(node *parser.Node) *parser.Node {
+	if node.Type() != "variable_declarator" {
+		return nil
+	}
+
+	valueNode := node.ChildByFieldName("value")
+	if valueNode == nil {
+		return nil
+	}
+
+	// Direct arrow function
+	if valueNode.Type() == "arrow_function" {
+		return valueNode
+	}
+
+	// React.memo(...) wrapping arrow function
+	if valueNode.Type() == "call_expression" {
+		argsNode := valueNode.ChildByFieldName("arguments")
+		if argsNode == nil {
+			return nil
+		}
+
+		// Return first arrow function argument
+		for _, child := range argsNode.Children() {
+			if child.Type() == "arrow_function" {
+				return child
+			}
+		}
+	}
+
+	return nil
+}
+
+// extractPropsFromArrowFunction extracts prop definitions from arrow function parameters
+func (b *Builder) extractPropsFromArrowFunction(arrowFunc *parser.Node) []PropDefinition {
+	var props []PropDefinition
+
+	if arrowFunc.Type() != "arrow_function" {
+		return props
+	}
+
+	// Get parameters node
+	params := arrowFunc.ChildByFieldName("parameters")
+	if params == nil {
+		return props
+	}
+
+	// Iterate through parameters (could be formal_parameters or just parenthesized expression)
+	for _, param := range params.Children() {
+		// Handle different parameter types
+		paramType := param.Type()
+
+		// Required or optional parameter (TypeScript)
+		if paramType == "required_parameter" || paramType == "optional_parameter" {
+			pattern := param.ChildByFieldName("pattern")
+			if pattern != nil {
+				props = append(props, b.extractPropsFromPattern(pattern)...)
+			}
+		}
+
+		// Identifier (plain JavaScript: const Foo = (props) => ...)
+		if paramType == "identifier" {
+			propName := param.Text()
+			line, col := param.StartPoint()
+			props = append(props, PropDefinition{
+				Name:     propName,
+				Type:     DataTypeObject,
+				Required: true,
+				Location: Location{Line: line + 1, Column: col},
+			})
+		}
+
+		// Object pattern (destructured props: const Foo = ({ prop1, prop2 }) => ...)
+		if paramType == "object_pattern" {
+			props = append(props, b.extractPropsFromPattern(param)...)
+		}
+	}
+
+	return props
+}
+
+// extractPropsFromPattern extracts props from a pattern node (shared between function and arrow function)
+func (b *Builder) extractPropsFromPattern(pattern *parser.Node) []PropDefinition {
+	var props []PropDefinition
+
+	if pattern == nil {
+		return props
+	}
+
+	// Handle destructured props: { prop1, prop2 }
+	if pattern.Type() == "object_pattern" {
+		line, col := pattern.StartPoint()
+		for _, child := range pattern.Children() {
+			if child.Type() == "shorthand_property_identifier_pattern" {
+				propName := child.Text()
+				props = append(props, PropDefinition{
+					Name:     propName,
+					Type:     DataTypeUnknown,
+					Required: true,
+					Location: Location{Line: line + 1, Column: col},
+				})
+			} else if child.Type() == "pair_pattern" {
+				// Handle renamed props: { prop: localName }
+				keyNode := child.ChildByFieldName("key")
+				if keyNode != nil {
+					propName := keyNode.Text()
+					props = append(props, PropDefinition{
+						Name:     propName,
+						Type:     DataTypeUnknown,
+						Required: true,
+						Location: Location{Line: line + 1, Column: col},
+					})
+				}
+			}
+		}
+	}
+
+	// Handle non-destructured props: props
+	if pattern.Type() == "identifier" {
+		propName := pattern.Text()
+		line, col := pattern.StartPoint()
+		props = append(props, PropDefinition{
+			Name:     propName,
+			Type:     DataTypeObject,
+			Required: true,
+			Location: Location{Line: line + 1, Column: col},
+		})
+	}
+
+	return props
+}
+
 // isReactComponent checks if a name follows React component naming (PascalCase)
 func isReactComponent(name string) bool {
 	if len(name) == 0 {
@@ -543,4 +743,74 @@ func contains(slice []string, value string) bool {
 		}
 	}
 	return false
+}
+
+// walkWithComponentContext walks the AST while tracking the current component context
+// The callback receives each node and the current component (nil if not inside a component)
+func (b *Builder) walkWithComponentContext(ast *parser.AST, filePath string, callback func(*parser.Node, *ComponentNode) bool) {
+	var componentStack []*ComponentNode
+
+	var walk func(*parser.Node) bool
+	walk = func(node *parser.Node) bool {
+		// Check if we're entering a component (function declaration)
+		if node.Type() == "function_declaration" {
+			componentName := b.getComponentNameFromFunction(node)
+			if componentName != "" && isReactComponent(componentName) {
+				line, _ := node.StartPoint()
+				componentID := GenerateComponentID(componentName, filePath, line+1)
+				if comp, exists := b.graph.ComponentNodes[componentID]; exists {
+					componentStack = append(componentStack, comp)
+				}
+			}
+		}
+
+		// Check if we're entering an arrow function component (via variable_declarator)
+		if node.Type() == "variable_declarator" {
+			componentName := b.getComponentNameFromArrowFunction(node)
+			if componentName != "" && isReactComponent(componentName) {
+				line, _ := node.StartPoint()
+				componentID := GenerateComponentID(componentName, filePath, line+1)
+				if comp, exists := b.graph.ComponentNodes[componentID]; exists {
+					componentStack = append(componentStack, comp)
+				}
+			}
+		}
+
+		// Get current component (top of stack)
+		var currentComponent *ComponentNode
+		if len(componentStack) > 0 {
+			currentComponent = componentStack[len(componentStack)-1]
+		}
+
+		// Call the user callback
+		if !callback(node, currentComponent) {
+			return false
+		}
+
+		// Walk children
+		for _, child := range node.Children() {
+			if !walk(child) {
+				return false
+			}
+		}
+
+		// Pop component stack when leaving component nodes
+		if node.Type() == "function_declaration" {
+			componentName := b.getComponentNameFromFunction(node)
+			if componentName != "" && isReactComponent(componentName) && len(componentStack) > 0 {
+				componentStack = componentStack[:len(componentStack)-1]
+			}
+		}
+
+		if node.Type() == "variable_declarator" {
+			componentName := b.getComponentNameFromArrowFunction(node)
+			if componentName != "" && isReactComponent(componentName) && len(componentStack) > 0 {
+				componentStack = componentStack[:len(componentStack)-1]
+			}
+		}
+
+		return true
+	}
+
+	walk(ast.Root)
 }

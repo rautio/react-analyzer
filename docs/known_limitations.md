@@ -1,6 +1,6 @@
 # Known Limitations
 
-**Last Updated:** 2025-11-18
+**Last Updated:** 2025-11-18 (Arrow Functions ✅ COMPLETED)
 **See also:** [ROADMAP.md](ROADMAP.md) for planned fixes
 
 This document outlines current limitations of the react-analyzer tool, organized by priority and impact.
@@ -11,7 +11,7 @@ This document outlines current limitations of the react-analyzer tool, organized
 
 | Priority | Limitation | Target Phase | ETA |
 |----------|-----------|--------------|-----|
-| 🔴 CRITICAL | [Arrow Function Components](#1-arrow-function-components) | Phase 2.2 | Q1 2026 |
+| ✅ COMPLETED | [Arrow Function Components](#1-arrow-function-components) | Phase 2.2 | ✅ DONE |
 | 🔴 CRITICAL | [Cross-File Prop Drilling](#2-cross-file-prop-drilling) | Phase 2.2 | Q1 2026 |
 | 🟠 HIGH | [Prop Spread Operators](#3-prop-spread-operators) | Phase 2.2 | Q1 2026 |
 | 🟠 HIGH | [Object Property Access](#4-object-property-access) | Phase 2.3 | Q1-Q2 2026 |
@@ -30,55 +30,41 @@ These gaps block real-world adoption and are highest priority for fixes.
 
 ### 1. Arrow Function Components
 
-**Status:** 🔴 CRITICAL - Blocks ~60-80% of modern React codebases
-**Target:** Phase 2.2 (Priority 1A)
-**ETA:** Q1 2026 (1-2 weeks)
-**Code Location:** `internal/graph/builder.go:106-107`
+**Status:** ✅ COMPLETED (Phase 2.2 Priority 1A)
+**Completed:** 2025-11-18
+**Code Location:** `internal/graph/builder.go`
 
-#### Issue
-Components defined as arrow functions are not detected.
+#### ~~Issue~~ FIXED
+Components defined as arrow functions are now fully supported.
 
-#### Current Behavior
-Only `function_declaration` nodes are processed; arrow function components are ignored.
-
-#### Example
+#### What Now Works
+All arrow function component patterns are detected:
 ```tsx
-// NOT DETECTED ❌
+// ✅ ALL DETECTED NOW
 const MyComponent = ({ theme }: Props) => {
     return <div className={theme}>Content</div>;
 };
 
-// DETECTED ✅
+const MemoComponent = memo(({ theme }: Props) => {
+    return <div className={theme}>Content</div>;
+});
+
+export const ExportedComponent = () => <div />;
+
 function MyComponent({ theme }: Props) {
     return <div className={theme}>Content</div>;
 }
 ```
 
-#### Why
-The AST walker in `buildComponentNodes()` only handles `function_declaration` node types, not `variable_declarator` with arrow function initializers.
+#### Implementation Details
+- Added `getComponentNameFromArrowFunction()` to detect arrow components from `variable_declarator` nodes
+- Added `extractPropsFromArrowFunction()` to extract props from arrow function parameters
+- Updated all 4 build phases to handle arrow functions using stack-based component tracking
+- Supports both direct arrow functions and `React.memo()` wrapped arrow functions
+- Test fixtures added: `ArrowFunctionDrilling.tsx`, `MemoArrowFunctionDrilling.tsx`, `MixedArrowAndFunction.tsx`
 
 #### Workaround
-**Convert arrow functions to function declarations:**
-```tsx
-// Instead of:
-const MyComponent = (props) => <div />;
-
-// Use:
-function MyComponent(props) {
-    return <div />;
-}
-```
-
-**Impact:** Requires codebase changes; not always practical.
-
-#### Planned Fix
-1. Detect `variable_declarator` with arrow function initializers
-2. Check if the arrow function returns JSX
-3. Validate PascalCase naming convention
-4. Extract props from arrow function parameters
-5. Update all 6 rules to work with arrow components
-
-**See:** [ROADMAP.md - Phase 2.2, Priority 1A](ROADMAP.md#priority-1a-arrow-function-components-1-2-weeks)
+~~No workaround needed - arrow functions are fully supported!~~
 
 ---
 
