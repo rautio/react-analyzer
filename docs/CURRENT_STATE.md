@@ -1,7 +1,7 @@
 # Current State - What Works Today
 
 **Last Updated:** 2025-11-18
-**Version:** Phase 2.2 Complete! (Arrow Functions + Cross-File + Partial Spreads)
+**Version:** Phase 2.3 Complete! (Partial Prop Usage + Object Property Access)
 
 This document describes what the react-analyzer tool can do **right now**, helping you understand its current capabilities and limitations.
 
@@ -11,10 +11,12 @@ This document describes what the react-analyzer tool can do **right now**, helpi
 
 ✅ **What Works:**
 - 6 production-ready analysis rules
-- **NEW:** Cross-file component analysis (prop drilling across files!)
-- **NEW:** Arrow function components (`const Foo = () => <div />`)
-- **NEW:** React.memo wrapped arrow functions
-- **NEW:** Partial spread operator support (infrastructure in place)
+- **NEW (2.3):** Partial prop usage detection (reduces false positives!)
+- **NEW (2.3):** Object property access tracking (`settings.locale` now detected!)
+- **NEW (2.2):** Cross-file component analysis (prop drilling across files!)
+- **NEW (2.2):** Arrow function components (`const Foo = () => <div />`)
+- **NEW (2.2):** React.memo wrapped arrow functions
+- **NEW (2.2):** Partial spread operator support (infrastructure in place)
 - Function declaration components
 - Named and default exports
 - Explicit prop passing
@@ -25,7 +27,8 @@ This document describes what the react-analyzer tool can do **right now**, helpi
 
 ❌ **What Doesn't Work Yet:**
 - Full prop spread through non-destructured props
-- Object property access tracking
+- Deep nested object property access (config.settings.theme.primary)
+- Computed property access (settings[key])
 
 **See:** [known_limitations.md](known_limitations.md) for full details.
 

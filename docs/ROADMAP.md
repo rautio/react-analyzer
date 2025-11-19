@@ -217,105 +217,79 @@ Full support requires TypeScript AST integration, planned for Phase 2.3.
 
 ---
 
-### 🎯 Phase 2.3: Enhanced Accuracy (4-5 weeks)
+### ✅ Phase 2.3: Enhanced Accuracy - COMPLETE!
 
+**Completed:** 2025-11-18
 **Goal:** Reduce false positives and improve recommendation quality
-**Target:** Q1-Q2 2026
-**Priority:** HIGH - Improves user trust
+**Result:** False positives significantly reduced, object property tracking working!
+**Progress:** 100% (Partial Prop Usage ✅, Object Property Access ✅, Multiple Props → Future)
 
-#### Priority 2A: Partial Prop Usage Detection (1-2 weeks)
+#### Priority 2A: Partial Prop Usage Detection ✅ COMPLETED
 
-**Problem:** Flags components that both use AND pass props
-**Impact:** MEDIUM - False positives hurt user trust
+**Status:** ✅ Shipped (2025-11-18)
+**Impact:** MEDIUM - False positives significantly reduced
 
-**Deliverables:**
-- [ ] AST analysis to detect prop references in component body
-- [ ] Check for prop usage in JSX expressions
-- [ ] Check for prop usage in hooks (useEffect, useMemo deps)
-- [ ] Check for prop usage in function calls
-- [ ] Update `componentUsesProp()` heuristic
-- [ ] PartialUsage.tsx test fixture passes
+**What Was Delivered:**
+- [x] Added `PropsUsedLocally` field to ComponentNode
+- [x] Implemented `findPropsUsedLocally()` AST analysis function
+- [x] Updated `componentUsesProp()` to check actual prop usage
+- [x] Changed violation threshold from `Depth >= 3` to `len(PassthroughPath) >= 2`
+- [x] PartialUsage.tsx test fixture passes (0 violations)
 
-**Technical Approach:**
-```go
-func componentUsesProp(comp *ComponentNode, propName string, g *Graph) bool {
-    // Walk component's AST to find references
-    found := false
-    comp.AST.Walk(func(node *parser.Node) bool {
-        if node.Type() == "identifier" && node.Text() == propName {
-            // Check it's not just in jsx_attribute for passing down
-            if !isJSXAttributeValue(node) {
-                found = true
-                return false // stop walking
-            }
-        }
-        return true
-    })
-    return found
-}
-```
+**Implementation:**
+- `internal/graph/types.go:75` - Added PropsUsedLocally field
+- `internal/graph/builder.go:885-959` - AST analysis to find prop references
+- `internal/graph/prop_drilling.go:171-189` - Updated componentUsesProp heuristic
+- `internal/graph/prop_drilling.go:47-51` - Updated violation detection threshold
 
-**Success Criteria:**
-- PartialUsage.tsx: No violation (currently fails)
-- No new false negatives
-- All existing test fixtures still pass
+**Result:** Components that both use AND pass props are no longer flagged as pure passthroughs.
 
 ---
 
-#### Priority 2B: Object Property Access Tracking (2 weeks)
+#### Priority 2B: Object Property Access Tracking ✅ COMPLETED
 
-**Problem:** Doesn't track `settings.locale` as separate prop flow
-**Impact:** MEDIUM-HIGH - Common TypeScript pattern
+**Status:** ✅ Shipped (2025-11-18)
+**Impact:** MEDIUM-HIGH - Common TypeScript pattern now supported
 
-**Deliverables:**
-- [ ] Detect `member_expression` nodes when creating edges
-- [ ] Track property access paths (e.g., `settings.locale`, `settings.currency`)
-- [ ] Create virtual state nodes for object properties OR track in edge metadata
-- [ ] Update prop matching to handle property chains
-- [ ] Dashboard.tsx test fixture passes (expects 3 violations)
+**What Was Delivered:**
+- [x] Detect `member_expression` nodes in JSX attributes
+- [x] Create virtual state nodes for object properties
+- [x] Link virtual states to parent via "derives" edges
+- [x] Updated `findPropOrigins()` to include derived state
+- [x] Dashboard.tsx: 3 violations detected (locale, currency, dateFormat)
 
-**Technical Approach:**
-```go
-// In processJSXElement
-if exprChild.Type() == "member_expression" {
-    // settings.locale
-    object := exprChild.ChildByFieldName("object")    // "settings"
-    property := exprChild.ChildByFieldName("property") // "locale"
+**Implementation:**
+- `internal/graph/builder.go:345-370` - Member expression detection
+- `internal/graph/builder.go:387-408` - extractMemberExpression helper
+- `internal/graph/builder.go:410-469` - ensurePropertyStateNode for virtual states
+- `internal/graph/prop_drilling.go:88` - Include StateTypeDerived in origins
 
-    objName := object.Text()
-    propName := property.Text()
+**Result:** Props accessed via object properties (settings.locale) are now tracked as separate flows.
 
-    // Check if object is parent state
-    if b.isParentState(objName, parentComp) {
-        // Create edge with property path
-        edge.PropName = propName
-        edge.PropPath = fmt.Sprintf("%s.%s", objName, propName)
-    }
-}
-```
-
-**Challenges:**
-- Deep property paths: `config.settings.theme.primary`
-- Array access: `items[0].name`
-- Computed access: `settings[key]`
-
-**Success Criteria:**
-- Dashboard.tsx: 3 violations detected (locale, currency, dateFormat)
-- Handles simple property access (1-2 levels deep)
-- Documented limitations for complex paths
+**Limitations Documented:**
+- Deep nesting (config.settings.theme.primary) - returns root only
+- Computed access (settings[key]) - not supported
+- Can be enhanced in future if needed
 
 ---
 
-#### Priority 2C: Multiple Props Analysis (1 week)
+#### Priority 2C: Multiple Props Analysis → DEFERRED
+
+**Status:** ⏸️ Deferred to Future Enhancement
+**Rationale:** Focus on issue detection over suggestion improvements
 
 **Problem:** Reports each drilled prop separately; doesn't suggest combining
-**Impact:** MEDIUM - Recommendations could be better
+**Impact:** LOW - Nice to have, not critical for core functionality
 
-**Deliverables:**
-- [ ] Detect when multiple props follow same path
-- [ ] Suggest combining into single context or config object
-- [ ] Enhanced recommendation messages
-- [ ] Update test expectations
+**Future Deliverables:**
+- Detect when multiple props follow same path
+- Suggest combining into single context or config object
+- Enhanced recommendation messages
+
+**Deferred Because:**
+- Detection accuracy is more important than suggestion quality
+- Current suggestions are adequate
+- Can be revisited after other high-priority features
 
 **Example Output:**
 ```
