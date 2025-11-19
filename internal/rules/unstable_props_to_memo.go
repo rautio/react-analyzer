@@ -27,6 +27,11 @@ func (r *UnstablePropsToMemo) Check(ast *parser.AST, resolver *analyzer.ModuleRe
 		return nil
 	}
 
+	// Acquire global tree-sitter lock before walking ASTs
+	// Tree-sitter C library is not thread-safe - must serialize all AST operations
+	resolver.LockTreeSitter()
+	defer resolver.UnlockTreeSitter()
+
 	// Detection 1: React.memo components with unstable props
 	issues = append(issues, r.checkMemoComponentProps(ast, resolver)...)
 
@@ -422,8 +427,7 @@ func (r *UnstablePropsToMemo) isComponentMemoized(componentName string, currentF
 		return false, err
 	}
 
-	// Analyze symbols if not already done
-	analyzer.AnalyzeSymbols(targetModule)
+	// Note: GetModule() already calls AnalyzeSymbols(), so symbols are populated
 
 	// Check if the component is memoized in the target module
 	// Use the imported name (not the local alias) to look up in the target module

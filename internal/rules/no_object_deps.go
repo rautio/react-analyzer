@@ -19,6 +19,13 @@ func (r *NoObjectDeps) Name() string {
 func (r *NoObjectDeps) Check(ast *parser.AST, resolver *analyzer.ModuleResolver) []Issue {
 	var issues []Issue
 
+	// Acquire global tree-sitter lock before walking ASTs
+	// Tree-sitter C library is not thread-safe - must serialize all AST operations
+	if resolver != nil {
+		resolver.LockTreeSitter()
+		defer resolver.UnlockTreeSitter()
+	}
+
 	// Walk the AST to find function declarations (potential React components)
 	ast.Root.Walk(func(node *parser.Node) bool {
 		// Look for function declarations and arrow functions

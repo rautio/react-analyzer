@@ -20,6 +20,13 @@ func (r *NoStaleState) Name() string {
 func (r *NoStaleState) Check(ast *parser.AST, resolver *analyzer.ModuleResolver) []Issue {
 	var issues []Issue
 
+	// Acquire global tree-sitter lock before walking ASTs
+	// Tree-sitter C library is not thread-safe - must serialize all AST operations
+	if resolver != nil {
+		resolver.LockTreeSitter()
+		defer resolver.UnlockTreeSitter()
+	}
+
 	// Step 1: Find all useState declarations and build state mapping
 	stateMap := r.findUseStateDeclarations(ast.Root)
 

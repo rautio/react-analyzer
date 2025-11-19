@@ -14,7 +14,7 @@ import (
 type ModuleResolver struct {
 	modules      map[string]*Module // Cache of parsed modules (key: absolute path)
 	mu           sync.RWMutex       // Protects modules map for concurrent access
-	parserMu     sync.Mutex         // Protects parser (tree-sitter is not thread-safe)
+	treeSitterMu sync.Mutex         // GLOBAL lock - protects ALL tree-sitter operations (parsing + AST walking). Tree-sitter C library is not thread-safe.
 	baseDir      string             // Project root directory
 	parser       *parser.TreeSitterParser
 	aliasCache   map[string]map[string]string // Per-directory alias cache: dir -> aliases
@@ -209,16 +209,17 @@ func (r *ModuleResolver) GetModule(filePath string) (*Module, error) {
 		return nil, fmt.Errorf("cannot read %s: %v", absPath, err)
 	}
 
-	// Parse with mutex protection (tree-sitter parser is not thread-safe)
-	r.parserMu.Lock()
-	ast, err := r.parser.ParseFile(absPath, content)
-	r.parserMu.Unlock()
+	// Acquire global tree-sitter lock for ALL operations (parsing + AST walking)
+	// The tree-sitter C library is not thread-safe, so we must serialize all operations
+	r.treeSitterMu.Lock()
+	defer r.treeSitterMu.Unlock()
 
+	ast, err := r.parser.ParseFile(absPath, content)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse %s: %v", absPath, err)
 	}
 
-	// Extract imports
+	// Extract imports (walks AST)
 	imports := ExtractImports(ast)
 
 	// Create module
@@ -229,7 +230,7 @@ func (r *ModuleResolver) GetModule(filePath string) (*Module, error) {
 		Symbols:  make(map[string]*Symbol),
 	}
 
-	// Analyze symbols in this module (populate Symbols map)
+	// Analyze symbols in this module (walks AST)
 	AnalyzeSymbols(module)
 
 	// Cache it with write lock
@@ -257,4 +258,16 @@ func (r *ModuleResolver) GetModules() map[string]*Module {
 		result[k] = v
 	}
 	return result
+}
+
+// LockTreeSitter acquires the global tree-sitter lock
+// MUST be called before any AST walking operations (e.g., in rule checks)
+// MUST be paired with UnlockTreeSitter() using defer
+func (r *ModuleResolver) LockTreeSitter() {
+	r.treeSitterMu.Lock()
+}
+
+// UnlockTreeSitter releases the global tree-sitter lock
+func (r *ModuleResolver) UnlockTreeSitter() {
+	r.treeSitterMu.Unlock()
 }
