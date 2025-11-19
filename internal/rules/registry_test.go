@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewRegistry(t *testing.T) {
-	registry := NewRegistry()
+	registry := NewRegistry(nil)
 
 	if registry == nil {
 		t.Fatal("Expected registry, got nil")
@@ -21,7 +21,7 @@ func TestNewRegistry(t *testing.T) {
 }
 
 func TestRegistry_Count(t *testing.T) {
-	registry := NewRegistry()
+	registry := NewRegistry(nil)
 
 	count := registry.Count()
 	if count < 1 {
@@ -30,7 +30,7 @@ func TestRegistry_Count(t *testing.T) {
 }
 
 func TestRegistry_GetRules(t *testing.T) {
-	registry := NewRegistry()
+	registry := NewRegistry(nil)
 
 	rules := registry.GetRules()
 	if len(rules) == 0 {
@@ -46,7 +46,7 @@ func TestRegistry_GetRules(t *testing.T) {
 }
 
 func TestRegistry_GetRule(t *testing.T) {
-	registry := NewRegistry()
+	registry := NewRegistry(nil)
 
 	// Get existing rule
 	rule, found := registry.GetRule("no-object-deps")
@@ -68,7 +68,7 @@ func TestRegistry_GetRule(t *testing.T) {
 }
 
 func TestRegistry_RunAll(t *testing.T) {
-	registry := NewRegistry()
+	registry := NewRegistry(nil)
 
 	// Load and parse a test file
 	content, err := os.ReadFile("../../test/fixtures/with-hooks.tsx")
@@ -111,7 +111,7 @@ func TestRegistry_RunAll(t *testing.T) {
 }
 
 func TestRegistry_RunAllOnCleanFile(t *testing.T) {
-	registry := NewRegistry()
+	registry := NewRegistry(nil)
 
 	// Load and parse a clean test file
 	content, err := os.ReadFile("../../test/fixtures/valid-object-deps.tsx")

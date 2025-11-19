@@ -2,17 +2,23 @@ package rules
 
 import (
 	"github.com/rautio/react-analyzer/internal/analyzer"
+	"github.com/rautio/react-analyzer/internal/config"
 	"github.com/rautio/react-analyzer/internal/graph"
 	"github.com/rautio/react-analyzer/internal/parser"
 )
 
 // Registry holds all available rules
 type Registry struct {
-	rules []Rule
+	rules  []Rule
+	config *config.Config
 }
 
 // NewRegistry creates a new rule registry with all available rules
-func NewRegistry() *Registry {
+func NewRegistry(cfg *config.Config) *Registry {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+
 	return &Registry{
 		rules: []Rule{
 			&NoObjectDeps{},
@@ -24,6 +30,7 @@ func NewRegistry() *Registry {
 			&PlaceholderRule{},     // Demonstration of multiple rules
 			// Add new rules here as they're implemented
 		},
+		config: cfg,
 	}
 }
 
@@ -66,6 +73,17 @@ func (r *Registry) RunGraph(g *graph.Graph) []Issue {
 	for _, rule := range r.rules {
 		// Check if rule implements GraphRule interface
 		if graphRule, ok := rule.(GraphRule); ok {
+			// Special handling for configurable rules
+			if rule.Name() == "deep-prop-drilling" {
+				// Pass config to deep-prop-drilling rule
+				if dpdRule, ok := graphRule.(*DeepPropDrilling); ok {
+					issues := dpdRule.CheckGraphWithConfig(g, r.config)
+					allIssues = append(allIssues, issues...)
+					continue
+				}
+			}
+
+			// Default behavior for other graph rules
 			issues := graphRule.CheckGraph(g)
 			allIssues = append(allIssues, issues...)
 		}

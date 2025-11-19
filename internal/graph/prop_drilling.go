@@ -23,9 +23,10 @@ type ComponentReference struct {
 }
 
 // DetectPropDrilling finds all prop drilling violations in the graph
-// A violation occurs when a prop is passed through 3+ component levels
+// A violation occurs when a prop is passed through multiple component levels
 // with intermediate components not using the prop (passthrough only)
-func DetectPropDrilling(g *Graph) []PropDrillingViolation {
+// minPassthroughComponents: minimum number of passthrough components to trigger a violation
+func DetectPropDrilling(g *Graph, minPassthroughComponents int) []PropDrillingViolation {
 	var violations []PropDrillingViolation
 
 	// Find all state origins (useState, useReducer, etc.)
@@ -44,11 +45,11 @@ func DetectPropDrilling(g *Graph) []PropDrillingViolation {
 		for _, consumer := range leafConsumers {
 			path := tracePropPath(origin, consumer, g)
 
-			// Violation if there are 2+ passthrough components
+			// Violation if there are enough passthrough components
 			// A passthrough component is one that receives a prop and passes it down
 			// without using it locally (not referencing it in the component body)
 			// This distinguishes from components that both use AND pass props
-			if len(path.PassthroughPath) >= 2 {
+			if len(path.PassthroughPath) >= minPassthroughComponents {
 				violation := PropDrillingViolation{
 					PropName:              origin.Name,
 					Origin:                origin.Location,

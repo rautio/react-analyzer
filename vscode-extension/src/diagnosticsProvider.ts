@@ -65,6 +65,22 @@ export class DiagnosticsProvider {
         diagnostic.source = 'React Analyzer';
         diagnostic.code = issue.rule;
 
+        // Add related information if available
+        if (issue.related && issue.related.length > 0) {
+            diagnostic.relatedInformation = issue.related.map(related => {
+                const relatedLine = Math.max(0, related.line - 1);
+                const relatedColumn = Math.max(0, related.column);
+
+                return new vscode.DiagnosticRelatedInformation(
+                    new vscode.Location(
+                        vscode.Uri.file(related.filePath),
+                        new vscode.Position(relatedLine, relatedColumn)
+                    ),
+                    related.message
+                );
+            });
+        }
+
         // Add related information or tags based on rule type
         if (issue.rule.includes('prop-drilling') || issue.rule.includes('inline')) {
             diagnostic.tags = [vscode.DiagnosticTag.Unnecessary];

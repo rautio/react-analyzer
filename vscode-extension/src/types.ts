@@ -3,12 +3,20 @@
  * These match the JSON structures defined in Go
  */
 
+export interface RelatedInformation {
+    filePath: string;
+    line: number;
+    column: number;
+    message: string;
+}
+
 export interface Issue {
     rule: string;
     message: string;
     filePath: string;
     line: number;
     column: number;
+    related?: RelatedInformation[];
 }
 
 export interface Stats {

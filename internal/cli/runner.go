@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rautio/react-analyzer/internal/analyzer"
+	"github.com/rautio/react-analyzer/internal/config"
 	"github.com/rautio/react-analyzer/internal/graph"
 	"github.com/rautio/react-analyzer/internal/parser"
 	"github.com/rautio/react-analyzer/internal/rules"
@@ -103,15 +104,28 @@ func Run(path string, opts *Options) int {
 		filesToAnalyze = []string{path}
 	}
 
-	// Create rule registry
-	registry := rules.NewRegistry()
-
-	// Create module resolver for cross-file analysis
-	// Use the provided path as the base directory, or parent directory if it's a file
+	// Determine base directory for config and module resolution
 	baseDir := path
 	if !info.IsDir() {
 		baseDir = filepath.Dir(path)
 	}
+
+	// Load configuration from .reactanalyzerrc.json (if exists)
+	cfg, err := config.Load(baseDir)
+	if err != nil {
+		// Config loading error is non-fatal, use defaults
+		if opts.Verbose && !opts.JSON {
+			fmt.Fprintf(os.Stderr, "Warning: could not load config (%v), using defaults\n", err)
+		}
+		cfg = config.DefaultConfig()
+	} else if opts.Verbose && !opts.JSON {
+		fmt.Println("Configuration loaded successfully")
+	}
+
+	// Create rule registry with configuration
+	registry := rules.NewRegistry(cfg)
+
+	// Create module resolver for cross-file analysis
 	resolver, err := analyzer.NewModuleResolver(baseDir)
 	if err != nil {
 		printError(fmt.Errorf("failed to initialize module resolver: %v", err), opts.NoColor)

@@ -6,13 +6,22 @@ import (
 	"github.com/rautio/react-analyzer/internal/parser"
 )
 
-// Issue represents a single rule violation
-type Issue struct {
-	Rule     string `json:"rule"`     // Rule identifier (e.g., "no-object-deps")
-	Message  string `json:"message"`  // Human-readable message
-	FilePath string `json:"filePath"` // Path to the file
+// RelatedInformation represents additional context for an issue
+type RelatedInformation struct {
+	FilePath string `json:"filePath"` // Path to the related file
 	Line     uint32 `json:"line"`     // Line number (1-indexed)
 	Column   uint32 `json:"column"`   // Column number (0-indexed)
+	Message  string `json:"message"`  // Description of this related location
+}
+
+// Issue represents a single rule violation
+type Issue struct {
+	Rule     string               `json:"rule"`              // Rule identifier (e.g., "no-object-deps")
+	Message  string               `json:"message"`           // Human-readable message
+	FilePath string               `json:"filePath"`          // Path to the file
+	Line     uint32               `json:"line"`              // Line number (1-indexed)
+	Column   uint32               `json:"column"`            // Column number (0-indexed)
+	Related  []RelatedInformation `json:"related,omitempty"` // Additional context locations
 }
 
 // Rule defines the interface for all analysis rules
