@@ -10,6 +10,7 @@ node_modules/
 .vscode-test/
 *.log
 
+
 # OS files
 .DS_Store
 Thumbs.db

@@ -23,3 +23,6 @@ Thumbs.db
 
 # Development prompts
 prompts
+
+# Exception: Include .vscode for extension development configuration
+!vscode-extension/.vscode/
