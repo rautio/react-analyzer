@@ -1,8 +1,9 @@
 # Phase 2: Prop Drilling Detection Algorithm
 
-**Document Version:** 1.0
+**Document Version:** 2.0
 **Date:** 2025-11-18
-**Status:** Draft - Design Phase
+**Status:** Phase 2.1 Complete - Planning Phase 2.2+
+**Last Updated:** 2025-11-18
 
 ---
 
@@ -328,39 +329,103 @@ func generateRecommendation(origin *StateNode, path *PropPath) string {
 
 ## Implementation Phases
 
-### Phase 2.1: Basic Detection (Week 3-4)
+### ✅ Phase 2.1: Basic Detection (COMPLETED)
 
-**Scope:**
-- Detect drilling depth >= 3
-- Identify passthrough components
-- Basic recommendation (use Context)
+**Status:** ✅ SHIPPED (2025-11-18)
+**Duration:** Weeks 1-4
 
-**Limitations:**
-- Doesn't handle all prop usage patterns
-- Conservative detection (may miss some cases)
+**Delivered Features:**
+- ✅ Detect drilling depth >= 3 levels
+- ✅ Identify passthrough components (components that don't use props)
+- ✅ Basic Context API recommendations
+- ✅ Leaf consumer filtering (avoid duplicate violations)
+- ✅ Per-prop edge tracking (multiple props between same components)
+- ✅ 12 comprehensive test fixtures
 
-**Example Output:**
+**Actual Output Example:**
 
 ```
-src/components/App.tsx:12:5
-  [deep-prop-drilling] Prop 'theme' is drilled through 3 component levels (Dashboard → Sidebar → ThemeToggle).
-  Consider using Context API instead.
+/Users/oskari/repos/react-analyzer/test/fixtures/prop-drilling/SimpleDrilling.tsx
+  8:31 - [deep-prop-drilling] Prop 'count' is drilled through 4 component levels (Parent → Child). Consider using Context API to avoid passing 'count' through 4 component levels. Create a context at App and consume it directly in Display.
 
-  Path:
-    App (defines 'theme') → Dashboard → Sidebar → ThemeToggle (uses 'theme')
-
-  Passthrough components:
-    - Dashboard (src/components/Dashboard.tsx:8)
-    - Sidebar (src/components/Sidebar.tsx:5)
+✖ Found 1 issue in 1 file
+Analyzed 1 file in 1ms
 ```
 
-### Phase 2.2: Enhanced Detection (Future)
+**Known Limitations (addressed in Phase 2.2+):**
+- Only works within single files (not cross-file)
+- Only detects function declaration components (not arrow functions)
+- Doesn't handle prop spreads (`{...props}`)
+- Doesn't track object property access (`settings.locale`)
+- False positives for partial usage (component uses AND passes prop)
+
+**See:** [CURRENT_STATE.md](../CURRENT_STATE.md) for full details on what's working.
+
+---
+
+### 🚀 Phase 2.2: Core Completeness (PLANNED)
+
+**Status:** 📋 Planned for Q1 2026
+**Duration:** 4-6 weeks
+**Priority:** CRITICAL - These gaps block real-world adoption
+
+**Target Capabilities:**
+
+#### 2.2.A: Arrow Function Components (1-2 weeks)
+- Detect `const MyComponent = () => <div />`
+- Extract props from arrow function parameters
+- Support React.memo wrapping: `React.memo(() => <div />)`
+- Update all rules to work with arrow components
+
+**Impact:** Unblocks 60-80% of modern React codebases
+
+#### 2.2.B: Cross-File Prop Drilling (2-3 weeks)
+- Enhance `findComponentID()` to search imported files
+- Track import statements and resolve component definitions
+- Build cross-file component edges in graph
+- Handle circular dependencies and re-exports
+
+**Impact:** Makes detection work for real-world multi-file apps
+
+#### 2.2.C: Prop Spread Operators (2-3 weeks)
+- Detect `jsx_spread_attribute` nodes
+- Track props included in spreads
+- Create edges for all props in spread object
+- Handle partial spreads: `<Child {...rest} theme={theme} />`
+
+**Impact:** Handles very common React pattern
+
+**See:** [ROADMAP.md - Phase 2.2](../ROADMAP.md#phase-22-core-completeness-4-6-weeks) for detailed plans.
+
+---
+
+### 🎯 Phase 2.3: Enhanced Accuracy (PLANNED)
+
+**Status:** 📋 Planned for Q1-Q2 2026
+**Duration:** 4-5 weeks
 
 **Additional capabilities:**
-- Detect multiple props drilled together (suggest combining)
-- Track prop transformation along the path
-- Detect prop spreading that hides drilling
+- Detect when component both uses AND passes prop (reduce false positives)
+- Track object property access (`settings.locale`)
+- Detect multiple props drilled together (suggest combining into context)
+- Enhanced recommendations based on usage patterns
+
+**See:** [ROADMAP.md - Phase 2.3](../ROADMAP.md#phase-23-enhanced-accuracy-4-5-weeks) for details.
+
+---
+
+### 🔧 Phase 2.4: Advanced Patterns (PLANNED)
+
+**Status:** 📋 Planned for Q2 2026
+**Duration:** 3-5 weeks
+
+**Additional capabilities:**
+- Track prop renames along the path
+- Detect existing Context providers (improve recommendations)
+- Track prop transformations along the path
 - Suggest specific Context patterns based on use case
+
+**See:** [ROADMAP.md - Phase 2.4](../ROADMAP.md#phase-24-advanced-patterns-3-5-weeks) for details.
 
 ---
 
@@ -663,14 +728,31 @@ vscode.languages.registerCodeActionsProvider('typescriptreact', {
 
 ---
 
-## Next Steps
+## Completed Work (Phase 2.1)
 
-1. **Implement graph building** (Week 2)
-2. **Implement prop tracing** (Week 3)
-3. **Create test fixtures** (Week 3)
-4. **Add rule to registry** (Week 4)
-5. **VS Code visualization** (Week 5-6)
+1. ✅ **Graph building implemented** - Full 4-phase pipeline
+2. ✅ **Prop tracing implemented** - BFS-based path finding
+3. ✅ **Test fixtures created** - 12 comprehensive scenarios
+4. ✅ **Rule added to registry** - `deep-prop-drilling` rule
+5. ✅ **Leaf consumer filtering** - Avoids duplicate violations
+6. ✅ **Per-prop edge tracking** - Multiple props between components
+
+## Next Steps (Phase 2.2+)
+
+See [ROADMAP.md](../ROADMAP.md) for detailed plans.
+
+**Immediate Next (Phase 2.2 - Q1 2026):**
+1. Arrow function component detection
+2. Cross-file prop drilling
+3. Prop spread operator support
+
+**Future (Phase 2.3+ - Q2 2026):**
+4. VS Code extension with visualization
+5. Enhanced accuracy (reduce false positives)
+6. Advanced pattern detection
 
 ---
 
 **End of Document**
+**Last Updated:** 2025-11-18
+**Status:** Phase 2.1 Complete ✅
