@@ -526,15 +526,35 @@ The tool works great for:
 
 See [ROADMAP.md](ROADMAP.md) for full details.
 
-**Phase 2.2 (Q1 2026):**
-- ✅ Arrow function components
-- ✅ Cross-file prop drilling
-- ✅ Prop spread operators
+**Phase 2.2 - COMPLETE!** ✅
+- Arrow function components
+- Cross-file prop drilling
+- Prop spread operators (partial)
 
-**Phase 2.3 (Q1-Q2 2026):**
-- ✅ Partial prop usage detection
-- ✅ Object property access
-- ✅ Better recommendations
+**Phase 2.3 - COMPLETE!** ✅
+- Partial prop usage detection
+- Object property access tracking
+
+**Phase 2.4: Advanced Patterns** (Planned - Q2 2026)
+- Prop rename tracking
+- Context API integration
+- Prop transformation detection
+
+**Phase 3: New Rule Development** (Planned - Q2-Q3 2026)
+- Comprehensive catalog of 29 antipatterns documented
+- **Tier 1 Priorities:**
+  - Cascading re-renders
+  - Unstable import breaking child memo
+  - useState for server state detection
+  - Missing cleanup in useEffect
+- **Tier 2:** Context value memoization, infinite loops, provider positioning
+- Focus on antipatterns ESLint can't detect
+- See [react_antipatterns_catalog.md](design/react_antipatterns_catalog.md)
+
+**Phase 4: Tooling & Developer Experience** (Planned - Q3 2026)
+- VS Code extension with inline diagnostics
+- Auto-fix generation
+- CLI enhancements (SARIF output, config files, watch mode)
 
 ---
 

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,10 +19,12 @@ var validExtensions = []string{".tsx", ".jsx", ".ts", ".js"}
 
 // Options contains CLI configuration
 type Options struct {
-	Verbose bool
-	Quiet   bool
-	NoColor bool
-	Workers int // Number of parallel workers (0 = auto-detect CPUs, 1 = sequential)
+	Verbose      bool
+	Quiet        bool
+	NoColor      bool
+	Workers      int  // Number of parallel workers (0 = auto-detect CPUs, 1 = sequential)
+	JSON         bool // Output results as JSON
+	IncludeGraph bool // Include dependency graph in JSON output (requires JSON mode)
 }
 
 // AnalysisStats holds metrics about the analysis run
@@ -43,6 +46,22 @@ type RuleStats struct {
 	Name        string
 	IssuesFound int
 	Duration    time.Duration
+}
+
+// JSONOutput represents the complete JSON output structure
+type JSONOutput struct {
+	Issues []rules.Issue `json:"issues"`
+	Stats  JSONStats     `json:"stats"`
+	Graph  *graph.Graph  `json:"graph,omitempty"` // Only included if --graph flag is set
+}
+
+// JSONStats represents statistics in JSON format
+type JSONStats struct {
+	FilesAnalyzed   int     `json:"filesAnalyzed"`
+	FilesWithIssues int     `json:"filesWithIssues"`
+	FilesClean      int     `json:"filesClean"`
+	TotalIssues     int     `json:"totalIssues"`
+	DurationMs      float64 `json:"durationMs"`
 }
 
 // Run executes the analysis and returns exit code
@@ -100,12 +119,12 @@ func Run(path string, opts *Options) int {
 	}
 	defer resolver.Close()
 
-	// Print analysis start for directories
-	if len(filesToAnalyze) > 1 && !opts.Quiet {
+	// Print analysis start for directories (not in JSON mode)
+	if len(filesToAnalyze) > 1 && !opts.Quiet && !opts.JSON {
 		fmt.Printf("Analyzing %d files...\n\n", len(filesToAnalyze))
 	}
 
-	if opts.Verbose {
+	if opts.Verbose && !opts.JSON {
 		fmt.Printf("Rules enabled: %d\n", registry.Count())
 		for _, rule := range registry.GetRules() {
 			fmt.Printf("  - %s\n", rule.Name())
@@ -130,8 +149,10 @@ func Run(path string, opts *Options) int {
 	var allIssues []rules.Issue
 	for _, result := range fileResults {
 		if result.Error != nil {
-			// Print error but continue with other files
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s: %v\n", result.FilePath, result.Error)
+			// Print error but continue with other files (not in JSON mode)
+			if !opts.JSON {
+				fmt.Fprintf(os.Stderr, "Warning: skipping %s: %v\n", result.FilePath, result.Error)
+			}
 			continue
 		}
 
@@ -143,17 +164,21 @@ func Run(path string, opts *Options) int {
 	}
 
 	// Run graph-based rules (if any modules were parsed)
+	var depGraph *graph.Graph // Store graph for potential JSON output
 	if stats.FilesAnalyzed > 0 {
-		if opts.Verbose {
+		if opts.Verbose && !opts.JSON {
 			fmt.Println("\nBuilding dependency graph...")
 		}
 		graphStart := time.Now()
 
 		// Build the graph from all parsed modules
 		builder := graph.NewBuilder(resolver)
-		depGraph, err := builder.Build()
+		var err error
+		depGraph, err = builder.Build()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to build dependency graph: %v\n", err)
+			if !opts.JSON {
+				fmt.Fprintf(os.Stderr, "Warning: failed to build dependency graph: %v\n", err)
+			}
 		} else {
 			// Run graph-based rules
 			graphIssues := registry.RunGraph(depGraph)
@@ -167,7 +192,7 @@ func Run(path string, opts *Options) int {
 				stats.FilesWithIssues += len(graphFilesAffected)
 			}
 
-			if opts.Verbose {
+			if opts.Verbose && !opts.JSON {
 				fmt.Printf("Graph analysis completed in %s\n", formatDuration(time.Since(graphStart)))
 				fmt.Printf("  Components: %d\n", len(depGraph.ComponentNodes))
 				fmt.Printf("  State nodes: %d\n", len(depGraph.StateNodes))
@@ -188,7 +213,12 @@ func Run(path string, opts *Options) int {
 		collectRuleStats(allIssues, stats)
 	}
 
-	// Display results
+	// Output results in JSON format if requested
+	if opts.JSON {
+		return outputJSON(allIssues, stats, depGraph, opts)
+	}
+
+	// Display results in text format
 	if len(allIssues) == 0 {
 		if !opts.Quiet {
 			if len(filesToAnalyze) == 1 {
@@ -466,4 +496,45 @@ func formatDuration(d time.Duration) string {
 	} else {
 		return fmt.Sprintf("%.2fs", d.Seconds())
 	}
+}
+
+// outputJSON outputs analysis results in JSON format
+func outputJSON(issues []rules.Issue, stats *AnalysisStats, depGraph *graph.Graph, opts *Options) int {
+	// Ensure issues is an empty array instead of nil for consistent JSON
+	if issues == nil {
+		issues = []rules.Issue{}
+	}
+
+	// Build JSON output structure
+	output := JSONOutput{
+		Issues: issues,
+		Stats: JSONStats{
+			FilesAnalyzed:   stats.FilesAnalyzed,
+			FilesWithIssues: stats.FilesWithIssues,
+			FilesClean:      stats.FilesClean,
+			TotalIssues:     stats.TotalIssues,
+			DurationMs:      float64(stats.Duration.Microseconds()) / 1000.0,
+		},
+	}
+
+	// Include graph if requested and available
+	if opts.IncludeGraph && depGraph != nil {
+		output.Graph = depGraph
+	}
+
+	// Marshal to JSON with indentation
+	jsonBytes, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to marshal JSON output: %v\n", err)
+		return 2
+	}
+
+	// Print JSON to stdout
+	fmt.Println(string(jsonBytes))
+
+	// Return exit code based on issues found
+	if len(issues) > 0 {
+		return 1
+	}
+	return 0
 }

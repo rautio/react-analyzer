@@ -27,20 +27,22 @@
 | 14 | **Stale Closure** | useCallback/useMemo references outdated values due to missing deps | ⚠️ Caught by exhaustive-deps | ❌ No | ❌ No | 🟢 Easy | ⭐ LOW (ESLint solves it) |
 | 15 | **Conditional Hook Calls** | Calling hooks inside conditions/loops (violates Rules of Hooks) | ✅ `react-hooks/rules-of-hooks` | ❌ No | ❌ No | 🟢 Easy | ⭐ LOW (ESLint solves it) |
 | 16 | **Non-Primitive Hook Dependencies** | Including objects/arrays in dependency array without memoization | ❌ No | ❌ No | ❌ No | 🟡 Medium | ⭐⭐⭐ HIGH |
+| 17 | **useState for Server State** | Using useState + useEffect for data fetching (should use react-query/SWR) | ❌ No | ❌ No | ❌ No | 🟡 Medium | ⭐⭐⭐ HIGH |
+| 18 | **Missing Cleanup in useEffect** | Event listeners, subscriptions, timers not cleaned up in useEffect | ❌ No | ❌ No | ❌ No | 🟡 Medium | ⭐⭐⭐ HIGH |
 | **STATE MANAGEMENT** ||||||||
-| 17 | **Props Drilling (3+ levels)** | Passing props through multiple components that don't use them | ❌ No | ✅ **YES** | ✅ **YES** | 🔴 **HARD** | ⭐⭐⭐ **HIGH** |
-| 18 | **Direct State Mutation** | Mutating state directly instead of using setState | ⚠️ `no-param-reassign` (generic) | ❌ No | ❌ No | 🟡 Medium | ⭐⭐ MEDIUM |
-| 19 | **Derived State Not Computed** | Storing derived state instead of computing from source | ❌ No | ❌ No | ❌ No | 🟡 Medium | ⭐ LOW |
-| 20 | **Over-Reliance on useState** | Using state for values that don't need re-renders (should be useRef) | ❌ No | ❌ No | ❌ No | 🟡 Medium | ⭐ LOW |
+| 19 | **Props Drilling (3+ levels)** | Passing props through multiple components that don't use them | ❌ No | ✅ **YES** | ✅ **YES** | 🔴 **HARD** | ⭐⭐⭐ **HIGH** |
+| 20 | **Direct State Mutation** | Mutating state directly instead of using setState | ⚠️ `no-param-reassign` (generic) | ❌ No | ❌ No | 🟡 Medium | ⭐⭐ MEDIUM |
+| 21 | **Derived State Not Computed** | Storing derived state instead of computing from source | ❌ No | ❌ No | ❌ No | 🟡 Medium | ⭐ LOW |
+| 22 | **Over-Reliance on useState** | Using state for values that don't need re-renders (should be useRef) | ❌ No | ❌ No | ❌ No | 🟡 Medium | ⭐ LOW |
 | **JSX - PERFORMANCE** ||||||||
-| 21 | **Inline Styles** | Style objects created on every render | ⚠️ `react/forbid-dom-props` (can ban style) | ❌ No | ❌ No | 🟢 Easy | ⭐⭐ MEDIUM |
-| 22 | **Missing Keys in Lists** | Missing or improper keys in .map() | ✅ `react/jsx-key` | ❌ No | ❌ No | 🟢 Easy | ⭐ LOW (ESLint solves it) |
-| 23 | **Index as Key** | Using array index as key (causes issues on reorder) | ⚠️ Warned by `react/no-array-index-key` | ❌ No | ❌ No | 🟢 Easy | ⭐ LOW (ESLint warns) |
-| 24 | **Large Component Rendering Small Update** | Rendering large lists when only one item changed | ❌ No | ❌ No | ⚠️ Helpful | 🔴 Hard | ⭐ LOW (needs profiling) |
+| 23 | **Inline Styles** | Style objects created on every render | ⚠️ `react/forbid-dom-props` (can ban style) | ❌ No | ❌ No | 🟢 Easy | ⭐⭐ MEDIUM |
+| 24 | **Missing Keys in Lists** | Missing or improper keys in .map() | ✅ `react/jsx-key` | ❌ No | ❌ No | 🟢 Easy | ⭐ LOW (ESLint solves it) |
+| 25 | **Index as Key** | Using array index as key (causes issues on reorder) | ⚠️ Warned by `react/no-array-index-key` | ❌ No | ❌ No | 🟢 Easy | ⭐ LOW (ESLint warns) |
+| 26 | **Large Component Rendering Small Update** | Rendering large lists when only one item changed | ❌ No | ❌ No | ⚠️ Helpful | 🔴 Hard | ⭐ LOW (needs profiling) |
 | **ADVANCED - CROSS-FILE** ||||||||
-| 25 | **Unstable Import Breaking Child Memo** | Importing non-memoized function and passing to memoized child | ❌ No | ✅ **YES** | ✅ **YES** | 🔴 **HARD** | ⭐⭐⭐ **HIGH** |
-| 26 | **Context Provider Too High** | Context provider at root when only small subtree needs it | ❌ No | ✅ YES | ✅ YES | 🔴 Hard | ⭐⭐ MEDIUM |
-| 27 | **Shared State Causing Unrelated Re-renders** | Single state object shared by unrelated components | ❌ No | ✅ YES | ✅ YES | 🔴 Hard | ⭐⭐ MEDIUM |
+| 27 | **Unstable Import Breaking Child Memo** | Importing non-memoized function and passing to memoized child | ❌ No | ✅ **YES** | ✅ **YES** | 🔴 **HARD** | ⭐⭐⭐ **HIGH** |
+| 28 | **Context Provider Too High** | Context provider at root when only small subtree needs it | ❌ No | ✅ YES | ✅ YES | 🔴 Hard | ⭐⭐ MEDIUM |
+| 29 | **Shared State Causing Unrelated Re-renders** | Single state object shared by unrelated components | ❌ No | ✅ YES | ✅ YES | 🔴 Hard | ⭐⭐ MEDIUM |
 
 ---
 

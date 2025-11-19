@@ -322,26 +322,152 @@ Consider creating a single AppSettingsContext instead of passing them individual
 **Goal:** Expand beyond prop drilling to other antipatterns
 **Target:** Q2-Q3 2026
 **Priority:** MEDIUM - Depends on user feedback
+**Status:** PLANNED - Detailed use cases documented below
 
-#### Candidate Rules
-From [react_antipatterns_catalog.md](react_antipatterns_catalog.md):
+See [react_antipatterns_catalog.md](design/react_antipatterns_catalog.md) for the comprehensive catalog of 27 antipatterns.
 
-**High Priority:**
-- [ ] Missing key in lists
-- [ ] useState for server state (should use react-query/SWR)
-- [ ] Too many useState calls (suggest useReducer)
-- [ ] Missing cleanup in useEffect
+---
 
-**Medium Priority:**
-- [ ] Large component detection (complexity metrics)
-- [ ] Prop drilling depth warnings (configurable threshold)
-- [ ] Exhaustive deps improvements
+#### Rule Candidates - Prioritized by Value
 
-**Will be prioritized based on:**
-- User feature requests
-- GitHub issues / discussions
-- Community feedback
-- Real-world usage patterns
+**TIER 1: High-Value Rules (ESLint Can't Handle)**
+
+These rules provide unique value that traditional linters cannot achieve:
+
+**1. Cascading Re-renders** (⭐⭐⭐ Catalog #9)
+- **Problem:** Parent re-render causes unnecessary child re-renders down the tree
+- **Detection:** Trace component tree to find non-memoized children of frequently re-rendering parents
+- **Complexity:** HIGH - Requires graph traversal and re-render frequency heuristics
+- **Catalog:** Has detailed detection algorithm
+- **Value:** Can't be detected by ESLint (requires component tree analysis)
+
+**2. Unstable Import Breaking Child Memo** (⭐⭐⭐ Catalog #25)
+- **Problem:** Exporting non-memoized object/array/function breaks child's React.memo
+- **Detection:** Cross-file analysis - check if imported value is memoized at export site
+- **Complexity:** MEDIUM - Extends existing `unstable-props-to-memo` rule
+- **Catalog:** Has detailed detection algorithm
+- **Value:** Cross-file analysis that ESLint cannot do
+
+**3. useState for Server State** (NEW - Add to Catalog)
+- **Problem:** Using useState/useEffect for data fetching instead of react-query/SWR
+- **Detection:** Detect useState + useEffect with fetch/axios/HTTP calls
+- **Complexity:** MEDIUM - Pattern matching on useEffect hooks
+- **Example:**
+```tsx
+// ❌ Antipattern
+const [data, setData] = useState(null);
+useEffect(() => {
+  fetch('/api/users').then(r => r.json()).then(setData);
+}, []);
+
+// ✅ Suggestion
+const { data } = useQuery('/api/users');
+```
+- **Value:** Common mistake, no ESLint rule exists
+
+**4. Missing Cleanup in useEffect** (NEW - Add to Catalog)
+- **Problem:** Event listeners, subscriptions, timers not cleaned up
+- **Detection:**
+  - useEffect with addEventListener/setInterval/setTimeout/subscribe
+  - No return function or return function doesn't clean up
+- **Complexity:** MEDIUM - AST analysis of useEffect return statements
+- **Example:**
+```tsx
+// ❌ Antipattern
+useEffect(() => {
+  window.addEventListener('resize', handleResize);
+  // Missing cleanup!
+}, []);
+
+// ✅ Fix
+useEffect(() => {
+  window.addEventListener('resize', handleResize);
+  return () => window.removeEventListener('resize', handleResize);
+}, []);
+```
+- **Value:** Causes memory leaks, difficult to detect manually
+
+---
+
+**TIER 2: Medium-Value Rules**
+
+**5. Context Value Not Memoized** (⭐⭐ Catalog #7)
+- **Problem:** Context Provider value recreated every render
+- **Detection:** Context.Provider with inline object/array value
+- **Complexity:** LOW - Single-file AST pattern matching
+- **Example:**
+```tsx
+// ❌ Antipattern
+<ThemeContext.Provider value={{ theme, setTheme }}>
+
+// ✅ Fix
+const value = useMemo(() => ({ theme, setTheme }), [theme]);
+<ThemeContext.Provider value={value}>
+```
+
+**6. Too Many useState Calls** (⭐ Catalog #20 - Over-Reliance on useState)
+- **Problem:** Component with 5+ useState calls, hard to maintain
+- **Detection:** Count useState calls per component, suggest useReducer when threshold exceeded
+- **Complexity:** LOW - Simple counting
+- **Threshold:** Configurable (default: 5)
+
+**7. Infinite useEffect Loop** (⭐⭐ Catalog #12)
+- **Problem:** useEffect updates dependency it depends on
+- **Detection:** useEffect that updates state in its dependency array
+- **Complexity:** MEDIUM - Track state updates within effect body
+- **Note:** Partial ESLint coverage exists (exhaustive-deps warns but doesn't detect loops)
+
+**8. Context Provider Too High** (⭐⭐ Catalog #26)
+- **Problem:** Context Provider at root causes all consumers to re-render
+- **Detection:** Context Provider with many descendants, few actual consumers
+- **Complexity:** HIGH - Requires component tree + context consumer analysis
+- **Suggestion:** Move provider closer to consumers
+
+---
+
+**TIER 3: Lower Priority (ESLint Handles or Low Impact)**
+
+**9. Missing Keys in Lists** (⭐ Catalog #22)
+- **Reason:** ESLint rule `react/jsx-key` already handles this
+- **Status:** Not implementing (redundant with ESLint)
+
+**10. Exhaustive Dependencies Improvements** (⭐ Catalog #11)
+- **Reason:** ESLint rule `react-hooks/exhaustive-deps` already handles this
+- **Status:** Not implementing (redundant with ESLint)
+
+**11. Large Component Detection** (⭐ Catalog #24)
+- **Problem:** Components >300 LOC are hard to maintain
+- **Detection:** Count LOC, cyclomatic complexity
+- **Complexity:** MEDIUM
+- **Priority:** LOW - More of a code smell than performance issue
+
+---
+
+#### Implementation Plan
+
+**Phase 3.1: Complete Tier 1 Catalog Rules (4-6 weeks)**
+1. Cascading Re-renders (2 weeks)
+2. Unstable Import Breaking Child Memo (1-2 weeks)
+
+**Phase 3.2: New High-Value Rules (4-6 weeks)**
+3. useState for Server State (2 weeks)
+4. Missing Cleanup in useEffect (2 weeks)
+
+**Phase 3.3: Medium-Value Rules (As Needed)**
+5-8. Based on user feedback and real-world usage
+
+**Success Metrics:**
+- Each rule: >90% true positive rate
+- Each rule: <10% false positive rate
+- Performance: <5ms additional analysis time per file
+- Test coverage: 20+ test fixtures per rule
+
+**Prioritization Factors:**
+1. **User feature requests** - GitHub issues/discussions
+2. **Catalog priority** - ⭐⭐⭐ HIGH ratings prioritized
+3. **ESLint coverage** - Avoid duplicating ESLint rules
+4. **Implementation complexity** - Balance value vs. effort
+5. **Real-world usage** - Feedback from production users
 
 ---
 

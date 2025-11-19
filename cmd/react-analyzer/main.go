@@ -29,6 +29,10 @@ func main() {
 	workers := flag.Int("workers", 0, "")
 	flag.IntVar(workers, "j", 0, "")
 
+	jsonOutput := flag.Bool("json", false, "")
+
+	includeGraph := flag.Bool("graph", false, "")
+
 	// Custom usage (will show our help text)
 	flag.Usage = func() {
 		cli.PrintHelp(os.Stdout)
@@ -59,10 +63,12 @@ func main() {
 
 	// Build options
 	opts := &cli.Options{
-		Verbose: *verbose,
-		Quiet:   *quiet,
-		NoColor: *noColor,
-		Workers: *workers,
+		Verbose:      *verbose,
+		Quiet:        *quiet,
+		NoColor:      *noColor,
+		Workers:      *workers,
+		JSON:         *jsonOutput,
+		IncludeGraph: *includeGraph,
 	}
 
 	// Run analysis and exit with appropriate code
