@@ -44,10 +44,11 @@ func DetectPropDrilling(g *Graph) []PropDrillingViolation {
 		for _, consumer := range leafConsumers {
 			path := tracePropPath(origin, consumer, g)
 
-			// Violation if drilling depth >= 3 (2+ passthrough components)
-			// Path includes: origin component → intermediate1 → intermediate2 → consumer
-			// Depth 3 means: origin → passthrough1 → passthrough2 → consumer (3 levels)
-			if path.Depth >= 3 {
+			// Violation if there are 2+ passthrough components
+			// A passthrough component is one that receives a prop and passes it down
+			// without using it locally (not referencing it in the component body)
+			// This distinguishes from components that both use AND pass props
+			if len(path.PassthroughPath) >= 2 {
 				violation := PropDrillingViolation{
 					PropName:              origin.Name,
 					Origin:                origin.Location,
@@ -170,30 +171,22 @@ func findPropConsumers(propID string, g *Graph) []*ComponentNode {
 
 // componentUsesProp checks if a component actually uses a prop or just passes it through
 func componentUsesProp(comp *ComponentNode, propName string, g *Graph) bool {
-	// Check if this prop is only in PropsPassedTo (pure passthrough)
-	// vs. being used locally
+	// Check if this prop is in PropsUsedLocally (determined during AST analysis)
+	for _, usedProp := range comp.PropsUsedLocally {
+		if usedProp == propName {
+			return true
+		}
+	}
 
 	// If the component has no children, it must be using the prop
+	// (This is a fallback for components created before PropsUsedLocally was added)
 	if len(comp.Children) == 0 {
 		return true
 	}
 
-	// Check if prop is passed to ALL children
-	// If it's not passed to any child, then it must be used locally
-	passedToChild := false
-	for _, propsToChild := range comp.PropsPassedTo {
-		for _, passedProp := range propsToChild {
-			if passedProp == propName {
-				passedToChild = true
-				break
-			}
-		}
-	}
-
-	// For now, if it's passed to a child, assume it's a passthrough
-	// If it's NOT passed to any child, it's being used
-	// This is a simplified heuristic - full implementation would check AST usage
-	return !passedToChild
+	// If the prop is not in PropsUsedLocally and the component has children,
+	// it's likely a passthrough component
+	return false
 }
 
 // tracePropPath traces the path from a state origin to a consumer component

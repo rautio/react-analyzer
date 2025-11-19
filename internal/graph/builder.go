@@ -85,17 +85,27 @@ func (b *Builder) buildComponentNodes(module *analyzer.Module) error {
 			// Extract props
 			props := b.extractProps(node)
 
+			// Extract prop names for local usage analysis
+			propNames := make([]string, len(props))
+			for i, prop := range props {
+				propNames[i] = prop.Name
+			}
+
+			// Analyze which props are used locally (not just passed to children)
+			propsUsedLocally := b.findPropsUsedLocally(node, propNames)
+
 			compNode := &ComponentNode{
-				ID:            componentID,
-				Name:          componentName,
-				Type:          ComponentTypeFunction,
-				Location:      Location{FilePath: module.FilePath, Line: line + 1, Column: col, Component: componentName},
-				IsMemoized:    isMemoized,
-				StateNodes:    []string{},
-				ConsumedState: []string{},
-				Children:      []string{},
-				Props:         props,
-				PropsPassedTo: make(map[string][]string),
+				ID:               componentID,
+				Name:             componentName,
+				Type:             ComponentTypeFunction,
+				Location:         Location{FilePath: module.FilePath, Line: line + 1, Column: col, Component: componentName},
+				IsMemoized:       isMemoized,
+				StateNodes:       []string{},
+				ConsumedState:    []string{},
+				Children:         []string{},
+				Props:            props,
+				PropsPassedTo:    make(map[string][]string),
+				PropsUsedLocally: propsUsedLocally,
 			}
 
 			b.graph.AddComponentNode(compNode)
@@ -124,17 +134,27 @@ func (b *Builder) buildComponentNodes(module *analyzer.Module) error {
 			}
 			props := b.extractPropsFromArrowFunction(arrowFunc)
 
+			// Extract prop names for local usage analysis
+			propNames := make([]string, len(props))
+			for i, prop := range props {
+				propNames[i] = prop.Name
+			}
+
+			// Analyze which props are used locally (not just passed to children)
+			propsUsedLocally := b.findPropsUsedLocally(node, propNames)
+
 			compNode := &ComponentNode{
-				ID:            componentID,
-				Name:          componentName,
-				Type:          ComponentTypeFunction,
-				Location:      Location{FilePath: module.FilePath, Line: line + 1, Column: col, Component: componentName},
-				IsMemoized:    isMemoized,
-				StateNodes:    []string{},
-				ConsumedState: []string{},
-				Children:      []string{},
-				Props:         props,
-				PropsPassedTo: make(map[string][]string),
+				ID:               componentID,
+				Name:             componentName,
+				Type:             ComponentTypeFunction,
+				Location:         Location{FilePath: module.FilePath, Line: line + 1, Column: col, Component: componentName},
+				IsMemoized:       isMemoized,
+				StateNodes:       []string{},
+				ConsumedState:    []string{},
+				Children:         []string{},
+				Props:            props,
+				PropsPassedTo:    make(map[string][]string),
+				PropsUsedLocally: propsUsedLocally,
 			}
 
 			b.graph.AddComponentNode(compNode)
@@ -880,6 +900,80 @@ func (b *Builder) extractPropsFromPattern(pattern *parser.Node) []PropDefinition
 	}
 
 	return props
+}
+
+// findPropsUsedLocally analyzes a component's AST to determine which props are referenced locally
+// (not just passed to children). This is used to distinguish between pure passthrough components
+// and components that actually use their props.
+func (b *Builder) findPropsUsedLocally(componentNode *parser.Node, propNames []string) []string {
+	if len(propNames) == 0 {
+		return []string{}
+	}
+
+	// Build a set of prop names for quick lookup
+	propSet := make(map[string]bool)
+	for _, prop := range propNames {
+		propSet[prop] = true
+	}
+
+	propsUsed := make(map[string]bool)
+
+	// Find the function body
+	var body *parser.Node
+	if componentNode.Type() == "function_declaration" {
+		body = componentNode.ChildByFieldName("body")
+	} else if componentNode.Type() == "variable_declarator" {
+		// Arrow function case
+		arrowFunc := b.getArrowFunctionNode(componentNode)
+		if arrowFunc != nil {
+			body = arrowFunc.ChildByFieldName("body")
+		}
+	}
+
+	if body == nil {
+		return []string{}
+	}
+
+	// Walk the body and find prop references
+	var walk func(*parser.Node, bool)
+	walk = func(node *parser.Node, inJSXAttributeValue bool) {
+		nodeType := node.Type()
+
+		// Check if we're entering a JSX attribute value context
+		// JSX attribute values are where props are passed to children
+		newInJSXAttributeValue := inJSXAttributeValue
+		if nodeType == "jsx_attribute" {
+			// We're in a JSX attribute, mark that child nodes are in attribute value context
+			newInJSXAttributeValue = true
+		}
+
+		// If this is an identifier that matches a prop name
+		if nodeType == "identifier" {
+			propName := node.Text()
+			if propSet[propName] {
+				// Only count it as "used locally" if we're NOT in a JSX attribute value
+				// where it's being passed to a child
+				if !inJSXAttributeValue {
+					propsUsed[propName] = true
+				}
+			}
+		}
+
+		// Recursively walk children
+		for _, child := range node.Children() {
+			walk(child, newInJSXAttributeValue)
+		}
+	}
+
+	walk(body, false)
+
+	// Convert map to slice
+	result := []string{}
+	for prop := range propsUsed {
+		result = append(result, prop)
+	}
+
+	return result
 }
 
 // isReactComponent checks if a name follows React component naming (PascalCase)

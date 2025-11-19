@@ -61,17 +61,18 @@ type PropDefinition struct {
 
 // ComponentNode represents a React component
 type ComponentNode struct {
-	ID            string              `json:"id"`
-	Name          string              `json:"name"`
-	Type          ComponentType       `json:"type"`
-	Location      Location            `json:"location"`
-	IsMemoized    bool                `json:"isMemoized"`
-	StateNodes    []string            `json:"stateNodes"`    // IDs of state defined in this component
-	ConsumedState []string            `json:"consumedState"` // IDs of state consumed by this component
-	Parent        string              `json:"parent"`        // ID of parent component
-	Children      []string            `json:"children"`      // IDs of child components
-	Props         []PropDefinition    `json:"props"`
-	PropsPassedTo map[string][]string `json:"propsPassedTo"` // childComponentID -> []propNames
+	ID               string              `json:"id"`
+	Name             string              `json:"name"`
+	Type             ComponentType       `json:"type"`
+	Location         Location            `json:"location"`
+	IsMemoized       bool                `json:"isMemoized"`
+	StateNodes       []string            `json:"stateNodes"`    // IDs of state defined in this component
+	ConsumedState    []string            `json:"consumedState"` // IDs of state consumed by this component
+	Parent           string              `json:"parent"`        // ID of parent component
+	Children         []string            `json:"children"`      // IDs of child components
+	Props            []PropDefinition    `json:"props"`
+	PropsPassedTo    map[string][]string `json:"propsPassedTo"`    // childComponentID -> []propNames
+	PropsUsedLocally []string            `json:"propsUsedLocally"` // Props referenced in component body (not just passed)
 }
 
 // EdgeType represents the type of relationship between nodes
