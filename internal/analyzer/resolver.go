@@ -259,15 +259,3 @@ func (r *ModuleResolver) GetModules() map[string]*Module {
 	}
 	return result
 }
-
-// LockTreeSitter acquires the global tree-sitter lock
-// MUST be called before any AST walking operations (e.g., in rule checks)
-// MUST be paired with UnlockTreeSitter() using defer
-func (r *ModuleResolver) LockTreeSitter() {
-	r.treeSitterMu.Lock()
-}
-
-// UnlockTreeSitter releases the global tree-sitter lock
-func (r *ModuleResolver) UnlockTreeSitter() {
-	r.treeSitterMu.Unlock()
-}

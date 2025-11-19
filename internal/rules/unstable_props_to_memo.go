@@ -27,11 +27,6 @@ func (r *UnstablePropsToMemo) Check(ast *parser.AST, resolver *analyzer.ModuleRe
 		return nil
 	}
 
-	// Acquire global tree-sitter lock before walking ASTs
-	// Tree-sitter C library is not thread-safe - must serialize all AST operations
-	resolver.LockTreeSitter()
-	defer resolver.UnlockTreeSitter()
-
 	// Detection 1: React.memo components with unstable props
 	issues = append(issues, r.checkMemoComponentProps(ast, resolver)...)
 
