@@ -544,7 +544,7 @@ function MyComponent() {
 	output := buf.String()
 
 	// Verify config was loaded (verbose mode should mention it)
-	if !strings.Contains(output, "Configuration loaded successfully") {
+	if !strings.Contains(output, "Configuration loaded from:") {
 		t.Errorf("Expected config to be loaded with relative path, got: %s", output)
 	}
 

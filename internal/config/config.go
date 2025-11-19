@@ -68,6 +68,13 @@ func DefaultConfig() *Config {
 // Searches for .reactanalyzerrc.json starting from the given directory
 // and walking up to the root, returning default config if not found
 func Load(startDir string) (*Config, error) {
+	cfg, _, err := LoadWithPath(startDir)
+	return cfg, err
+}
+
+// LoadWithPath loads configuration and returns the path to the config file found
+// Returns (config, configPath, error) where configPath is empty string if using defaults
+func LoadWithPath(startDir string) (*Config, string, error) {
 	// Start with default config
 	config := DefaultConfig()
 
@@ -75,24 +82,24 @@ func Load(startDir string) (*Config, error) {
 	configPath, err := findConfigFile(startDir)
 	if err != nil {
 		// No config file found, use defaults
-		return config, nil
+		return config, "", nil
 	}
 
 	// Read and parse config file
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %v", err)
+		return nil, "", fmt.Errorf("failed to read config file: %v", err)
 	}
 
 	var userConfig Config
 	if err := json.Unmarshal(data, &userConfig); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %v", err)
+		return nil, "", fmt.Errorf("failed to parse config file: %v", err)
 	}
 
 	// Merge user config with defaults
 	mergeConfig(config, &userConfig)
 
-	return config, nil
+	return config, configPath, nil
 }
 
 // findConfigFile searches for config files starting from dir

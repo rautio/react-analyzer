@@ -119,7 +119,7 @@ func Run(path string, opts *Options) int {
 	}
 
 	// Load configuration from .reactanalyzerrc.json (if exists)
-	cfg, err := config.Load(baseDir)
+	cfg, configPath, err := config.LoadWithPath(baseDir)
 	if err != nil {
 		// Config loading error is non-fatal, use defaults
 		if opts.Verbose && !opts.JSON {
@@ -127,7 +127,11 @@ func Run(path string, opts *Options) int {
 		}
 		cfg = config.DefaultConfig()
 	} else if opts.Verbose && !opts.JSON {
-		fmt.Println("Configuration loaded successfully")
+		if configPath != "" {
+			fmt.Printf("Configuration loaded from: %s\n", configPath)
+		} else {
+			fmt.Println("Configuration: using defaults (no config file found)")
+		}
 	}
 
 	// Create rule registry with configuration
@@ -143,6 +147,7 @@ func Run(path string, opts *Options) int {
 
 	// Verbose: show path aliases loaded
 	if opts.Verbose && !opts.JSON {
+		fmt.Printf("Searching for path aliases in: %s\n", baseDir)
 		aliases := resolver.GetPathAliases()
 		if len(aliases) > 0 {
 			fmt.Printf("Path aliases loaded: %d\n", len(aliases))
@@ -151,8 +156,7 @@ func Run(path string, opts *Options) int {
 			}
 			fmt.Println()
 		} else {
-			fmt.Println("No path aliases found (check tsconfig.json or .rarc)")
-			fmt.Println()
+			fmt.Printf("No path aliases found (checked tsconfig.json, .rarc, .reactanalyzerrc.json in %s)\n\n", baseDir)
 		}
 	}
 
