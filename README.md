@@ -36,6 +36,17 @@ Analyze a React file:
 react-analyzer src/App.tsx
 ```
 
+## VS Code Extension
+
+React Analyzer includes a VS Code extension with enhanced features:
+
+- **Real-time diagnostics** - Issues appear as squiggly underlines in your editor
+- **Component Tree View** - Visual sidebar showing your component hierarchy and state flow
+- **Clickable Related Information** - Jump between related code locations
+- **Analyze on save** - Automatic analysis when files are saved
+
+See [vscode-extension/README.md](vscode-extension/README.md) for installation and usage.
+
 ## Usage
 
 ### Command
@@ -107,6 +118,7 @@ React Analyzer includes several rules to catch common React performance issues a
 | ------------------------ | -------------------------------------------------------------------------------------------------------- | -------------------------------------- |
 | `unstable-props-to-memo` | Detects unstable props breaking memoization (React.memo, useMemo, useCallback). **Cross-file analysis**. | [docs](docs/rules/unstable-props-to-memo.md) |
 | `no-object-deps`         | Prevents unstable object/array dependencies causing infinite re-render loops                             | [docs](docs/rules/no-object-deps.md)   |
+| `deep-prop-drilling`     | Detects props drilled through multiple component levels. **Cross-file analysis**. Configurable threshold. | [docs](CONFIG.md#deep-prop-drilling)   |
 | `no-derived-state`       | Detects useState mirroring props via useEffect (unnecessary re-renders)                                  | [docs](docs/rules/no-derived-state.md) |
 | `no-stale-state`         | Prevents stale closures by requiring functional state updates                                            | [docs](docs/rules/no-stale-state.md)   |
 | `no-inline-props`        | Detects inline objects/arrays/functions in JSX props breaking memoization                                | [docs](docs/rules/no-inline-props.md)  |
@@ -137,24 +149,32 @@ If your project has a `tsconfig.json` with path mappings, React Analyzer will au
 }
 ```
 
-### Custom Configuration with `.reactanalyzer.json`
+### Custom Configuration with `.reactanalyzerrc.json`
 
-For non-TypeScript projects or to override `tsconfig.json`, create a `.reactanalyzer.json` file:
+Create a `.reactanalyzerrc.json` file to configure both path aliases and rules:
 
 ```json
 {
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/": ["src/"],
-      "@components/": ["src/components/"],
-      "~/": ["./"]
+      "@/*": ["src/*"],
+      "@components/*": ["src/components/*"],
+      "~/*": ["./*"]
+    }
+  },
+  "rules": {
+    "deep-prop-drilling": {
+      "enabled": true,
+      "options": {
+        "maxDepth": 3
+      }
     }
   }
 }
 ```
 
-**Priority:** `.reactanalyzer.json` > `tsconfig.json`
+**Priority:** `.reactanalyzerrc.json` > `.reactanalyzer.json` (legacy) > `tsconfig.json`
 
 **Supported Import Formats:**
 ```tsx
@@ -164,7 +184,7 @@ import Component from './Component';            // ✅ Relative import (always s
 import React from 'react';                      // ✅ External package (skipped)
 ```
 
-See `.reactanalyzer.example.json` for a complete configuration example.
+See [Configuration Guide](docs/CONFIG.md) for complete documentation and `.reactanalyzerrc.example.json` for examples.
 
 ## Troubleshooting
 
