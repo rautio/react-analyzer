@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import { CliRunner } from './cliRunner';
 import { DiagnosticsProvider } from './diagnosticsProvider';
+import { ComponentTreeProvider } from './treeViewProvider';
 
 let cliRunner: CliRunner;
 let diagnosticsProvider: DiagnosticsProvider;
+let treeProvider: ComponentTreeProvider;
 
 /**
  * Extension activation function
@@ -12,9 +14,13 @@ let diagnosticsProvider: DiagnosticsProvider;
 export async function activate(context: vscode.ExtensionContext) {
     console.log('React Analyzer extension is now active');
 
-    // Initialize CLI runner and diagnostics provider
+    // Initialize CLI runner, diagnostics provider, and tree view
     cliRunner = new CliRunner(context);
     diagnosticsProvider = new DiagnosticsProvider();
+    treeProvider = new ComponentTreeProvider();
+
+    // Register tree view
+    vscode.window.registerTreeDataProvider('reactAnalyzerComponentTree', treeProvider);
 
     // Check if CLI is available
     const isAvailable = await cliRunner.checkCliAvailable();
@@ -76,6 +82,34 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     );
 
+    // Register command: Refresh component tree
+    const refreshTreeCommand = vscode.commands.registerCommand(
+        'reactAnalyzer.refreshComponentTree',
+        async () => {
+            // Re-analyze the current workspace to update the tree
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (workspaceFolders && workspaceFolders.length > 0) {
+                const workspacePath = workspaceFolders[0].uri.fsPath;
+                await analyzeWorkspace(workspacePath);
+            }
+        }
+    );
+
+    // Register command: Navigate to location
+    const navigateCommand = vscode.commands.registerCommand(
+        'reactAnalyzer.navigateToLocation',
+        async (filePath: string, line: number, column: number) => {
+            const uri = vscode.Uri.file(filePath);
+            const document = await vscode.workspace.openTextDocument(uri);
+            const editor = await vscode.window.showTextDocument(document);
+
+            // Convert from 1-indexed to 0-indexed
+            const position = new vscode.Position(Math.max(0, line - 1), Math.max(0, column));
+            editor.selection = new vscode.Selection(position, position);
+            editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+        }
+    );
+
     // Register event: Analyze on save (if enabled)
     const onSaveHandler = vscode.workspace.onDidSaveTextDocument(async (document) => {
         const config = vscode.workspace.getConfiguration('reactAnalyzer');
@@ -92,6 +126,8 @@ export async function activate(context: vscode.ExtensionContext) {
         analyzeFileCommand,
         analyzeWorkspaceCommand,
         clearDiagnosticsCommand,
+        refreshTreeCommand,
+        navigateCommand,
         onSaveHandler,
         diagnosticsProvider
     );
@@ -119,8 +155,13 @@ async function analyzeFile(filePath: string): Promise<void> {
                 const dirPath = path.dirname(filePath);
 
                 // Analyze the entire directory to enable cross-file graph analysis
-                const result = await cliRunner.analyze(dirPath, false);
+                const result = await cliRunner.analyze(dirPath, true);
                 diagnosticsProvider.updateDiagnostics(result.issues);
+
+                // Update component tree if graph data is available
+                if (result.graph) {
+                    treeProvider.updateGraph(result.graph);
+                }
 
                 // Filter issues to only show those for files in the same directory
                 const issuesInDir = result.issues.filter(issue =>
@@ -157,8 +198,13 @@ async function analyzeWorkspace(workspacePath: string): Promise<void> {
             async (progress) => {
                 progress.report({ message: 'Analyzing workspace...' });
 
-                const result = await cliRunner.analyze(workspacePath, false);
+                const result = await cliRunner.analyze(workspacePath, true);
                 diagnosticsProvider.updateDiagnostics(result.issues);
+
+                // Update component tree if graph data is available
+                if (result.graph) {
+                    treeProvider.updateGraph(result.graph);
+                }
 
                 const stats = result.stats;
                 const issueCount = stats.totalIssues;

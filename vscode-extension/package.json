@@ -38,6 +38,15 @@
       {
         "command": "reactAnalyzer.clearDiagnostics",
         "title": "React Analyzer: Clear All Diagnostics"
+      },
+      {
+        "command": "reactAnalyzer.refreshComponentTree",
+        "title": "Refresh Component Tree",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "reactAnalyzer.navigateToLocation",
+        "title": "Navigate to Location"
       }
     ],
     "views": {
@@ -45,6 +54,15 @@
         {
           "id": "reactAnalyzerComponentTree",
           "name": "React Components"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "reactAnalyzer.refreshComponentTree",
+          "when": "view == reactAnalyzerComponentTree",
+          "group": "navigation"
         }
       ]
     },
