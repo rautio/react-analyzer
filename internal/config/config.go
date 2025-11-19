@@ -7,9 +7,16 @@ import (
 	"path/filepath"
 )
 
+// CompilerOptions represents TypeScript compiler options for path resolution
+type CompilerOptions struct {
+	BaseURL string              `json:"baseUrl"`
+	Paths   map[string][]string `json:"paths"`
+}
+
 // Config represents the complete configuration for the analyzer
 type Config struct {
-	Rules map[string]RuleConfig `json:"rules"`
+	CompilerOptions CompilerOptions       `json:"compilerOptions,omitempty"`
+	Rules           map[string]RuleConfig `json:"rules"`
 }
 
 // RuleConfig represents configuration for a specific rule

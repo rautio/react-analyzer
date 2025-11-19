@@ -8,24 +8,72 @@ Create a `.reactanalyzerrc.json` file in your project root:
 
 ```json
 {
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@components/*": ["src/components/*"]
+    }
+  },
   "rules": {
     "deep-prop-drilling": {
       "enabled": true,
       "options": {
-        "minPassthroughComponents": 2
+        "maxDepth": 3
       }
     }
   }
 }
 ```
 
+The configuration file supports two main sections:
+- **`compilerOptions`** - TypeScript path aliases for module resolution (optional)
+- **`rules`** - Rule-specific configuration (optional)
+
 ## File Discovery
 
-The analyzer searches for configuration files in the following order:
+### Rule Configuration
+The analyzer searches for rule configuration files in the following order:
 1. `.reactanalyzerrc.json` in the current directory
 2. `react-analyzer.json` in the current directory
 3. Walks up parent directories until a config is found
 4. Uses default configuration if no file is found
+
+### Path Aliases (Module Resolution)
+The analyzer searches for path aliases in the following order (highest to lowest priority):
+1. `.reactanalyzerrc.json` - `compilerOptions.paths` section
+2. `.reactanalyzer.json` - `compilerOptions.paths` section (legacy)
+3. `tsconfig.json` - Falls back to TypeScript config if no analyzer config exists
+
+**Recommended:** Use `.reactanalyzerrc.json` for both rules and path aliases in a single file.
+
+## Compiler Options (Path Aliases)
+
+The `compilerOptions` section allows you to configure TypeScript-style path aliases for module resolution. This helps the analyzer understand your import paths when detecting issues across files.
+
+```json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@components/*": ["src/components/*"],
+      "@utils/*": ["src/utils/*"],
+      "~/*": ["./*"]
+    }
+  }
+}
+```
+
+**Options:**
+- `baseUrl` - Base directory for resolving non-relative module names (default: ".")
+- `paths` - Path mapping entries (supports glob patterns with `*`)
+
+**Example mappings:**
+- `@/*` → `src/*` - Maps `@/components/Button` to `src/components/Button`
+- `@components/*` → `src/components/*` - Maps `@components/Button` to `src/components/Button`
+
+**Note:** If you already have a `tsconfig.json`, the analyzer will automatically read path aliases from it. You only need to add `compilerOptions` to `.reactanalyzerrc.json` if you want to override or add additional aliases.
 
 ## Rule Configuration
 
@@ -46,20 +94,6 @@ Detects props passed through multiple component levels without being used.
   - Set to `2` for stricter checking (only direct parent-child)
   - Set to `3` for balanced approach (one intermediate layer, default)
   - Set to `4+` for lenient checking (multiple intermediate layers)
-
-**Example:**
-```json
-{
-  "rules": {
-    "deep-prop-drilling": {
-      "enabled": true,
-      "options": {
-        "maxDepth": 3
-      }
-    }
-  }
-}
-```
 
 **Behavior:**
 - `maxDepth: 2` - Only allows: App → Sidebar (direct)
@@ -208,5 +242,24 @@ If no config file is found, the following defaults are used:
     "no-stale-state": { "enabled": true, "options": {} },
     "no-inline-props": { "enabled": true, "options": {} }
   }
+}
+```
+
+## Future Enhancements
+
+### JSON Schema Support
+
+We plan to add a JSON Schema file (`config-schema.json`) to provide IDE autocomplete and validation for `.reactanalyzerrc.json` files. This will enable:
+
+- **Autocomplete** - IntelliSense for available rules and options in VS Code and other editors
+- **Validation** - Real-time error checking for configuration syntax
+- **Documentation** - Inline descriptions and examples while editing config files
+
+Once available, you'll be able to reference it in your config:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/rautio/react-analyzer/main/config-schema.json",
+  "rules": { ... }
 }
 ```
