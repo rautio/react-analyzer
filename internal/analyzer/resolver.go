@@ -98,20 +98,19 @@ func (r *ModuleResolver) getOrLoadAliasesForFile(filePath string) map[string]str
 
 // findNearestConfigDir walks up the directory tree to find the nearest config file
 // Returns the directory containing the config, or empty string if not found
+// Checks for all supported config formats: .rarc, .reactanalyzerrc.json, .reactanalyzer.json, tsconfig.json
 func (r *ModuleResolver) findNearestConfigDir(startDir string) string {
 	dir := startDir
+	// Priority order (highest to lowest)
+	configNames := []string{".rarc", ".reactanalyzerrc.json", ".reactanalyzer.json", "tsconfig.json"}
 
 	for {
-		// Check for .reactanalyzer.json (higher priority)
-		reactConfigPath := filepath.Join(dir, ".reactanalyzer.json")
-		if _, err := os.Stat(reactConfigPath); err == nil {
-			return dir
-		}
-
-		// Check for tsconfig.json
-		tsconfigPath := filepath.Join(dir, "tsconfig.json")
-		if _, err := os.Stat(tsconfigPath); err == nil {
-			return dir
+		// Check for config files in priority order
+		for _, configName := range configNames {
+			configPath := filepath.Join(dir, configName)
+			if _, err := os.Stat(configPath); err == nil {
+				return dir
+			}
 		}
 
 		// Stop at baseDir (project root)

@@ -137,8 +137,16 @@ func Run(path string, opts *Options) int {
 	// Create rule registry with configuration
 	registry := rules.NewRegistry(cfg)
 
+	// Determine project root for module resolver
+	// If a config file was found, use its directory as the project root
+	// This ensures alias resolution works even when analyzing single files
+	projectRoot := baseDir
+	if configPath != "" {
+		projectRoot = filepath.Dir(configPath)
+	}
+
 	// Create module resolver for cross-file analysis
-	resolver, err := analyzer.NewModuleResolver(baseDir)
+	resolver, err := analyzer.NewModuleResolver(projectRoot)
 	if err != nil {
 		printError(fmt.Errorf("failed to initialize module resolver: %v", err), opts.NoColor)
 		return 2

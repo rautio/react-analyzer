@@ -21,6 +21,9 @@ func NewBuilder(resolver *analyzer.ModuleResolver) *Builder {
 
 // Build constructs the graph from all parsed modules
 func (b *Builder) Build() (*Graph, error) {
+	// Phase 0: Discover and parse all imported files recursively
+	b.discoverAndParseImports()
+
 	modules := b.resolver.GetModules()
 
 	// Phase 1: Build component nodes
@@ -52,6 +55,58 @@ func (b *Builder) Build() (*Graph, error) {
 	}
 
 	return b.graph, nil
+}
+
+// discoverAndParseImports recursively discovers and parses all imported files
+// This ensures the graph builder has all necessary modules even when analyzing a single file
+func (b *Builder) discoverAndParseImports() {
+	visited := make(map[string]bool)
+
+	// Start with all currently loaded modules
+	modules := b.resolver.GetModules()
+	for filePath := range modules {
+		b.discoverImportsRecursive(filePath, visited)
+	}
+}
+
+// discoverImportsRecursive recursively parses imported files
+func (b *Builder) discoverImportsRecursive(filePath string, visited map[string]bool) {
+	// Skip if already visited
+	if visited[filePath] {
+		return
+	}
+	visited[filePath] = true
+
+	// Get the module (should already be parsed)
+	modules := b.resolver.GetModules()
+	module, exists := modules[filePath]
+	if !exists {
+		return
+	}
+
+	// Parse all imports recursively
+	for _, imp := range module.Imports {
+		// Try to resolve the import
+		resolvedPath, err := b.resolver.Resolve(filePath, imp.Source)
+		if err != nil {
+			// Skip unresolvable imports (external packages, etc.)
+			continue
+		}
+
+		// Check if this module is already parsed
+		if _, exists := modules[resolvedPath]; !exists {
+			// Parse the imported file
+			if _, err := b.resolver.GetModule(resolvedPath); err != nil {
+				// Skip files that fail to parse
+				continue
+			}
+			// Refresh modules map after parsing
+			modules = b.resolver.GetModules()
+		}
+
+		// Recursively discover imports in this file
+		b.discoverImportsRecursive(resolvedPath, visited)
+	}
 }
 
 // buildComponentNodes creates ComponentNode entries for all React components
