@@ -141,6 +141,21 @@ func Run(path string, opts *Options) int {
 	}
 	defer resolver.Close()
 
+	// Verbose: show path aliases loaded
+	if opts.Verbose && !opts.JSON {
+		aliases := resolver.GetPathAliases()
+		if len(aliases) > 0 {
+			fmt.Printf("Path aliases loaded: %d\n", len(aliases))
+			for prefix, target := range aliases {
+				fmt.Printf("  %s -> %s\n", prefix, target)
+			}
+			fmt.Println()
+		} else {
+			fmt.Println("No path aliases found (check tsconfig.json or .rarc)")
+			fmt.Println()
+		}
+	}
+
 	// Print analysis start for directories (not in JSON mode)
 	if len(filesToAnalyze) > 1 && !opts.Quiet && !opts.JSON {
 		fmt.Printf("Analyzing %d files...\n\n", len(filesToAnalyze))
@@ -219,6 +234,30 @@ func Run(path string, opts *Options) int {
 				fmt.Printf("  Components: %d\n", len(depGraph.ComponentNodes))
 				fmt.Printf("  State nodes: %d\n", len(depGraph.StateNodes))
 				fmt.Printf("  Edges: %d\n", len(depGraph.Edges))
+
+				// Show component details
+				if len(depGraph.ComponentNodes) > 0 {
+					fmt.Println("\n  Component details:")
+					for id, comp := range depGraph.ComponentNodes {
+						children := ""
+						if len(comp.Children) > 0 {
+							children = fmt.Sprintf(", %d children", len(comp.Children))
+						}
+						fmt.Printf("    %s (file: %s%s)\n", comp.Name, comp.Location.FilePath, children)
+						_ = id // Use id to avoid unused variable warning
+					}
+				}
+
+				// Show prop passing edges
+				propEdges := 0
+				for _, edge := range depGraph.Edges {
+					if edge.Type == "passes" {
+						propEdges++
+					}
+				}
+				if propEdges > 0 {
+					fmt.Printf("\n  Prop passing edges: %d\n", propEdges)
+				}
 			}
 		}
 	}

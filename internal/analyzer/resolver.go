@@ -260,6 +260,16 @@ func (r *ModuleResolver) GetModules() map[string]*Module {
 	return result
 }
 
+// GetPathAliases returns the path aliases for the base directory
+// This loads aliases directly without using the cache (for display purposes)
+func (r *ModuleResolver) GetPathAliases() map[string]string {
+	aliases, _ := LoadPathAliases(r.baseDir)
+	if aliases == nil {
+		return make(map[string]string)
+	}
+	return aliases
+}
+
 // LockTreeSitter acquires the global tree-sitter lock
 // Must be called before any AST operations outside of GetModule
 func (r *ModuleResolver) LockTreeSitter() {
