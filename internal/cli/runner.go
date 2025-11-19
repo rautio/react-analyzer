@@ -147,16 +147,16 @@ func Run(path string, opts *Options) int {
 
 	// Verbose: show path aliases loaded
 	if opts.Verbose && !opts.JSON {
-		fmt.Printf("Searching for path aliases in: %s\n", baseDir)
-		aliases := resolver.GetPathAliases()
+		aliases, aliasConfigPath := resolver.GetPathAliasesWithSource()
 		if len(aliases) > 0 {
-			fmt.Printf("Path aliases loaded: %d\n", len(aliases))
+			fmt.Printf("Path aliases loaded from: %s\n", aliasConfigPath)
+			fmt.Printf("  Found %d alias(es):\n", len(aliases))
 			for prefix, target := range aliases {
-				fmt.Printf("  %s -> %s\n", prefix, target)
+				fmt.Printf("    %s -> %s\n", prefix, target)
 			}
 			fmt.Println()
 		} else {
-			fmt.Printf("No path aliases found (checked tsconfig.json, .rarc, .reactanalyzerrc.json in %s)\n\n", baseDir)
+			fmt.Printf("No path aliases found (searched from %s up to root)\n\n", baseDir)
 		}
 	}
 

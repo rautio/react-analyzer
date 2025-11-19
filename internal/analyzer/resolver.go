@@ -263,11 +263,16 @@ func (r *ModuleResolver) GetModules() map[string]*Module {
 // GetPathAliases returns the path aliases for the base directory
 // This loads aliases directly without using the cache (for display purposes)
 func (r *ModuleResolver) GetPathAliases() map[string]string {
-	aliases, _ := LoadPathAliases(r.baseDir)
+	aliases, _ := LoadPathAliasesWithPath(r.baseDir)
 	if aliases == nil {
 		return make(map[string]string)
 	}
 	return aliases
+}
+
+// GetPathAliasesWithSource returns the path aliases and the config file they came from
+func (r *ModuleResolver) GetPathAliasesWithSource() (map[string]string, string) {
+	return LoadPathAliasesWithPath(r.baseDir)
 }
 
 // LockTreeSitter acquires the global tree-sitter lock

@@ -19,44 +19,53 @@ type Config struct {
 }
 
 // LoadPathAliases loads path aliases from configuration files
+// Walks up the directory tree to find config files, similar to config.Load()
 // Priority: .rarc > .reactanalyzerrc.json > .reactanalyzer.json > tsconfig.json
-func LoadPathAliases(baseDir string) (map[string]string, error) {
-	aliases := make(map[string]string)
-
-	// Try tsconfig.json first (lowest priority)
-	tsconfigPath := filepath.Join(baseDir, "tsconfig.json")
-	if tsAliases, err := loadConfigFile(tsconfigPath, baseDir); err == nil {
-		aliases = tsAliases
-	}
-
-	// Try .reactanalyzer.json (low priority, will override)
-	reactAnalyzerPath := filepath.Join(baseDir, ".reactanalyzer.json")
-	if configAliases, err := loadConfigFile(reactAnalyzerPath, baseDir); err == nil {
-		// Merge/override with .reactanalyzer.json aliases
-		for k, v := range configAliases {
-			aliases[k] = v
-		}
-	}
-
-	// Try .reactanalyzerrc.json (medium priority, will override)
-	reactAnalyzerRcPath := filepath.Join(baseDir, ".reactanalyzerrc.json")
-	if configAliases, err := loadConfigFile(reactAnalyzerRcPath, baseDir); err == nil {
-		// Merge/override with .reactanalyzerrc.json aliases
-		for k, v := range configAliases {
-			aliases[k] = v
-		}
-	}
-
-	// Try .rarc (highest priority, will override)
-	rarcPath := filepath.Join(baseDir, ".rarc")
-	if configAliases, err := loadConfigFile(rarcPath, baseDir); err == nil {
-		// Merge/override with .rarc aliases
-		for k, v := range configAliases {
-			aliases[k] = v
-		}
-	}
-
+func LoadPathAliases(startDir string) (map[string]string, error) {
+	aliases, _ := LoadPathAliasesWithPath(startDir)
 	return aliases, nil
+}
+
+// LoadPathAliasesWithPath loads path aliases and returns the config file path
+// Returns (aliases, configPath) where configPath is the file that contained the aliases
+func LoadPathAliasesWithPath(startDir string) (map[string]string, string) {
+	aliases := make(map[string]string)
+	configNames := []string{"tsconfig.json", ".reactanalyzer.json", ".reactanalyzerrc.json", ".rarc"}
+	foundConfigPath := ""
+
+	// Walk up directory tree looking for config files
+	currentDir := startDir
+	for {
+		// Try each config file in priority order (reverse, so higher priority overrides)
+		for _, configName := range configNames {
+			configPath := filepath.Join(currentDir, configName)
+			if configAliases, err := loadConfigFile(configPath, currentDir); err == nil {
+				// Merge aliases (higher priority files override lower priority)
+				for k, v := range configAliases {
+					aliases[k] = v
+				}
+				// Track the last (highest priority) config file that had aliases
+				if len(configAliases) > 0 {
+					foundConfigPath = configPath
+				}
+			}
+		}
+
+		// If we found any aliases, stop searching
+		if len(aliases) > 0 {
+			break
+		}
+
+		// Move up one directory
+		parentDir := filepath.Dir(currentDir)
+		if parentDir == currentDir {
+			// Reached root directory
+			break
+		}
+		currentDir = parentDir
+	}
+
+	return aliases, foundConfigPath
 }
 
 // loadConfigFile loads and parses a config file (tsconfig.json or .reactanalyzer.json)
