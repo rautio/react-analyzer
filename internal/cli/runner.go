@@ -313,31 +313,17 @@ func Run(path string, opts *Options) int {
 
 // analyzeFile analyzes a single file and returns issues with timing metrics
 func analyzeFile(filePath string, registry *rules.Registry, resolver *analyzer.ModuleResolver, opts *Options) ([]rules.Issue, time.Duration, time.Duration, error) {
-	// Read file content
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, 0, 0, fmt.Errorf("cannot read file: %v", err)
-	}
-
-	// Create parser
-	p, err := parser.NewParser()
-	if err != nil {
-		return nil, 0, 0, fmt.Errorf("failed to initialize parser: %v", err)
-	}
-	defer p.Close()
-
-	// Parse file with timing
+	// Parse file using resolver (this caches the module for graph building)
 	parseStart := time.Now()
-	ast, err := p.ParseFile(filePath, content)
+	module, err := resolver.GetModule(filePath)
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("failed to parse file: %v", err)
 	}
-	defer ast.Close()
 	parseDuration := time.Since(parseStart)
 
 	// Verbose output for single file analysis
-	if opts.Verbose && len(content) > 0 {
-		hookCount := countHooks(ast)
+	if opts.Verbose {
+		hookCount := countHooksFromAST(module.AST)
 		if hookCount > 0 {
 			fmt.Printf("%s: found %d React hook call(s)\n", filePath, hookCount)
 		}
@@ -345,7 +331,7 @@ func analyzeFile(filePath string, registry *rules.Registry, resolver *analyzer.M
 
 	// Run all registered rules with timing
 	analyzeStart := time.Now()
-	issues := registry.RunAll(ast, resolver)
+	issues := registry.RunAll(module.AST, resolver)
 	analyzeDuration := time.Since(analyzeStart)
 
 	return issues, parseDuration, analyzeDuration, nil
@@ -480,7 +466,7 @@ func printIssuesGrouped(issues []rules.Issue, stats *AnalysisStats, opts *Option
 }
 
 // countHooks counts the number of React hook calls in the AST
-func countHooks(ast *parser.AST) int {
+func countHooksFromAST(ast *parser.AST) int {
 	count := 0
 	ast.Root.Walk(func(node *parser.Node) bool {
 		if node.IsHookCall() {
