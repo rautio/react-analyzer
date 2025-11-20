@@ -249,15 +249,23 @@ export class GraphWebview {
         .graph-container {
             width: 100%;
             height: calc(100vh - 48px);
-            overflow: auto;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
+            overflow: hidden;
+            position: relative;
+            background: var(--vscode-editor-background);
         }
 
         #mermaid-graph {
-            min-width: 100%;
+            transform-origin: 0 0;
+            transition: transform 0.1s ease-out;
+            cursor: grab;
+        }
+
+        #mermaid-graph.panning {
+            cursor: grabbing;
+        }
+
+        #mermaid-graph svg {
+            display: block;
         }
 
         /* Custom node styling */
@@ -348,8 +356,11 @@ export class GraphWebview {
 <body>
     <div class="toolbar">
         <input id="search" type="text" placeholder="Search components..." />
-        <button id="reset-zoom">Reset View</button>
-        <button id="reset-highlight">Clear Highlights</button>
+        <button id="zoom-in" title="Zoom In">➕</button>
+        <button id="zoom-out" title="Zoom Out">➖</button>
+        <button id="fit-screen" title="Fit to Screen">⛶</button>
+        <button id="reset-zoom" title="Reset View">↺</button>
+        <button id="reset-highlight" title="Clear Highlights">Clear</button>
     </div>
 
     <div class="graph-container">
@@ -452,35 +463,119 @@ export class GraphWebview {
                 node.setAttribute('data-name', nodeId);
             });
 
-            // Enable zoom/pan (basic implementation)
-            let isPanning = false;
-            let startX, startY;
+            // Enable zoom/pan
+            setupZoomPan();
+        }
+
+        // Zoom and pan functionality
+        let currentZoom = 1;
+        let panX = 0;
+        let panY = 0;
+        let isPanning = false;
+        let startX = 0;
+        let startY = 0;
+
+        function setupZoomPan() {
+            const container = document.getElementById('mermaid-graph');
             const graphContainer = document.querySelector('.graph-container');
 
+            // Mouse wheel zoom
+            graphContainer.addEventListener('wheel', (e) => {
+                e.preventDefault();
+
+                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                const newZoom = Math.min(Math.max(0.1, currentZoom * delta), 5);
+
+                // Zoom towards mouse position
+                const rect = graphContainer.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                // Adjust pan to zoom towards mouse
+                panX = mouseX - (mouseX - panX) * (newZoom / currentZoom);
+                panY = mouseY - (mouseY - panY) * (newZoom / currentZoom);
+
+                currentZoom = newZoom;
+                updateTransform();
+            });
+
+            // Pan with mouse drag
             graphContainer.addEventListener('mousedown', (e) => {
-                if (e.target === graphContainer || e.target === svg) {
+                // Only pan if clicking on background or SVG, not on nodes
+                const target = e.target;
+                if (target.classList.contains('graph-container') ||
+                    target.tagName === 'svg' ||
+                    target.tagName === 'g' ||
+                    target.classList.contains('mermaid')) {
                     isPanning = true;
-                    startX = e.clientX;
-                    startY = e.clientY;
-                    graphContainer.style.cursor = 'grabbing';
+                    startX = e.clientX - panX;
+                    startY = e.clientY - panY;
+                    container.classList.add('panning');
+                    e.preventDefault();
                 }
             });
 
             graphContainer.addEventListener('mousemove', (e) => {
                 if (isPanning) {
-                    const dx = e.clientX - startX;
-                    const dy = e.clientY - startY;
-                    graphContainer.scrollLeft -= dx;
-                    graphContainer.scrollTop -= dy;
-                    startX = e.clientX;
-                    startY = e.clientY;
+                    panX = e.clientX - startX;
+                    panY = e.clientY - startY;
+                    updateTransform();
                 }
             });
 
             graphContainer.addEventListener('mouseup', () => {
                 isPanning = false;
-                graphContainer.style.cursor = 'default';
+                container.classList.remove('panning');
             });
+
+            graphContainer.addEventListener('mouseleave', () => {
+                isPanning = false;
+                container.classList.remove('panning');
+            });
+        }
+
+        function updateTransform() {
+            const container = document.getElementById('mermaid-graph');
+            container.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + currentZoom + ')';
+        }
+
+        function zoomIn() {
+            currentZoom = Math.min(currentZoom * 1.2, 5);
+            updateTransform();
+        }
+
+        function zoomOut() {
+            currentZoom = Math.max(currentZoom / 1.2, 0.1);
+            updateTransform();
+        }
+
+        function resetZoom() {
+            currentZoom = 1;
+            panX = 0;
+            panY = 0;
+            updateTransform();
+        }
+
+        function fitToScreen() {
+            const container = document.getElementById('mermaid-graph');
+            const graphContainer = document.querySelector('.graph-container');
+            const svg = container.querySelector('svg');
+
+            if (!svg) return;
+
+            const svgRect = svg.getBBox();
+            const containerRect = graphContainer.getBoundingClientRect();
+
+            // Calculate zoom to fit
+            const scaleX = (containerRect.width - 40) / svgRect.width;
+            const scaleY = (containerRect.height - 40) / svgRect.height;
+            currentZoom = Math.min(scaleX, scaleY, 1); // Don't zoom in beyond 100%
+
+            // Center the graph
+            panX = (containerRect.width - svgRect.width * currentZoom) / 2;
+            panY = (containerRect.height - svgRect.height * currentZoom) / 2;
+
+            updateTransform();
         }
 
         function highlightConnectedNodes(nodeId) {
@@ -567,8 +662,20 @@ export class GraphWebview {
             });
         });
 
+        document.getElementById('zoom-in').addEventListener('click', () => {
+            zoomIn();
+        });
+
+        document.getElementById('zoom-out').addEventListener('click', () => {
+            zoomOut();
+        });
+
+        document.getElementById('fit-screen').addEventListener('click', () => {
+            fitToScreen();
+        });
+
         document.getElementById('reset-zoom').addEventListener('click', () => {
-            document.querySelector('.graph-container').scrollTo(0, 0);
+            resetZoom();
         });
 
         document.getElementById('reset-highlight').addEventListener('click', () => {
