@@ -546,11 +546,11 @@ func (b *Builder) ensurePropertyStateNode(objectName string, propertyName string
 	}
 	b.graph.AddEdge(derivesEdge)
 
-	// Create "defines" edge from component to virtual state
+	// Create "defines" edge (virtual state -> component)
 	definesEdge := Edge{
-		ID:       GenerateEdgeID(EdgeTypeDefines, component.ID, virtualStateID),
-		SourceID: component.ID,
-		TargetID: virtualStateID,
+		ID:       GenerateEdgeID(EdgeTypeDefines, virtualStateID, component.ID),
+		SourceID: virtualStateID,
+		TargetID: component.ID,
 		Type:     EdgeTypeDefines,
 		Location: component.Location,
 	}
@@ -1278,11 +1278,11 @@ func (b *Builder) handleUseStateWithPattern(useStateNode *parser.Node, pattern *
 	b.graph.AddStateNode(stateNode)
 	component.StateNodes = append(component.StateNodes, stateID)
 
-	// Add "defines" edge
+	// Add "defines" edge (state -> component, showing state is owned by component)
 	edge := Edge{
-		ID:       GenerateEdgeID(EdgeTypeDefines, component.ID, stateID),
-		SourceID: component.ID,
-		TargetID: stateID,
+		ID:       GenerateEdgeID(EdgeTypeDefines, stateID, component.ID),
+		SourceID: stateID,
+		TargetID: component.ID,
 		Type:     EdgeTypeDefines,
 		Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: component.Name},
 	}
@@ -1383,13 +1383,13 @@ func (b *Builder) handleCreateContext(createContextNode *parser.Node, pattern *p
 		b.graph.AddStateNode(contextStateNode)
 	}
 
-	// Add "defines" edge from component to context (if component context exists)
+	// Add "defines" edge (context -> component, showing context is owned by component)
 	// Note: createContext is often called at module level, so component might be nil
 	if component != nil {
 		edge := Edge{
-			ID:       GenerateEdgeID(EdgeTypeDefines, component.ID, contextStateID),
-			SourceID: component.ID,
-			TargetID: contextStateID,
+			ID:       GenerateEdgeID(EdgeTypeDefines, contextStateID, component.ID),
+			SourceID: contextStateID,
+			TargetID: component.ID,
 			Type:     EdgeTypeDefines,
 			Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: component.Name},
 		}
@@ -1488,12 +1488,12 @@ func (b *Builder) handleContextProvider(jsxNode *parser.Node, component *Compone
 				isStable := b.isStableValue(valueNode)
 				stabilityReason := b.getStabilityReason(valueNode)
 
-				// Create "defines" edge from provider component to context state
-				// This represents the component providing the context value
+				// Create "defines" edge (context -> provider component)
+				// This shows the context value flowing into the provider
 				edge := Edge{
-					ID:              GenerateEdgeIDWithProp(EdgeTypeDefines, component.ID, contextStateID, "value"),
-					SourceID:        component.ID,
-					TargetID:        contextStateID,
+					ID:              GenerateEdgeIDWithProp(EdgeTypeDefines, contextStateID, component.ID, "value"),
+					SourceID:        contextStateID,
+					TargetID:        component.ID,
 					Type:            EdgeTypeDefines,
 					PropName:        "value",
 					PropDataType:    propDataType,

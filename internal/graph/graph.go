@@ -48,11 +48,11 @@ func (g *Graph) GetEdgesByType(edgeType EdgeType) []Edge {
 
 // FindStateOrigin finds the component that defines a given state
 func (g *Graph) FindStateOrigin(stateID string) (*ComponentNode, error) {
-	// Look for "defines" edges pointing to this state
-	edges := g.GetIncomingEdges(stateID)
+	// Look for "defines" edges coming FROM this state (state -> component)
+	edges := g.GetOutgoingEdges(stateID)
 	for _, edge := range edges {
 		if edge.Type == EdgeTypeDefines {
-			if comp, exists := g.ComponentNodes[edge.SourceID]; exists {
+			if comp, exists := g.ComponentNodes[edge.TargetID]; exists {
 				return comp, nil
 			}
 		}
