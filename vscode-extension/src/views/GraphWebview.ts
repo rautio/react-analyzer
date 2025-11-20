@@ -465,6 +465,17 @@ export class GraphWebview {
                         }
                     },
                     {
+                        selector: 'node.context',
+                        style: {
+                            'background-color': '#0891b2',
+                            'border-color': '#0e7490',
+                            'shape': 'diamond',
+                            'width': 60,
+                            'height': 60,
+                            'color': '#ffffff'
+                        }
+                    },
+                    {
                         selector: 'node.memoized',
                         style: {
                             'border-width': 3,
@@ -536,6 +547,15 @@ export class GraphWebview {
                             'target-arrow-color': '#64748b',
                             'line-style': 'solid',
                             'width': 2.5
+                        }
+                    },
+                    {
+                        selector: 'edge.consumes',
+                        style: {
+                            'line-color': '#0891b2',
+                            'target-arrow-color': '#0891b2',
+                            'line-style': 'dotted',
+                            'width': 3
                         }
                     },
                     {
@@ -724,6 +744,12 @@ export class GraphWebview {
                     label += ' (' + node.dataType + ')';
                 }
 
+                // Determine classes based on state type
+                let classes = 'state';
+                if (node.type === 'context') {
+                    classes = 'state context';
+                }
+
                 nodes.push({
                     data: {
                         id: id,
@@ -735,7 +761,7 @@ export class GraphWebview {
                         stateType: node.type,
                         dataType: node.dataType
                     },
-                    classes: 'state'
+                    classes: classes
                 });
             });
 
@@ -744,14 +770,20 @@ export class GraphWebview {
                 const classes = [];
                 let label = edge.propName || '';
 
-                // Use stability data from backend to determine edge styling
-                if (edge.type === 'passes' && edge.propName) {
-                    console.log('Processing passes edge:', edge.propName, 'isStable:', edge.isStable, 'breaksMemo:', edge.breaksMemoization, 'reason:', edge.stabilityReason);
+                // Add class for consumes edges (context consumption)
+                if (edge.type === 'consumes') {
+                    classes.push('consumes');
+                    label = 'consumes';
+                }
 
-                    // Add data type to label in parentheses if present
-                    if (edge.propDataType && edge.propDataType !== 'unknown') {
-                        label = label + ' (' + edge.propDataType + ')';
-                    }
+                // Use stability data from backend to determine edge styling
+                // Apply to both "passes" edges (props) and "defines" edges with propName (context provider values)
+                if ((edge.type === 'passes' || edge.type === 'defines') && edge.propName) {
+                    console.log('Processing', edge.type, 'edge:', edge.propName, 'isStable:', edge.isStable, 'breaksMemo:', edge.breaksMemoization, 'reason:', edge.stabilityReason);
+
+                    // Always add data type to label in parentheses
+                    const dataType = edge.propDataType || 'unknown';
+                    label = label + ' (' + dataType + ')';
 
                     // Determine class based on stability
                     if (edge.breaksMemoization) {
@@ -893,9 +925,9 @@ export class GraphWebview {
             html += '<p><strong>Type:</strong> edge (prop passing)</p>';
             html += '<p><strong>Prop Name:</strong> ' + (data.label || 'N/A') + '</p>';
 
-            if (data.dataType && data.dataType !== 'unknown') {
-                html += '<p><strong>Data Type:</strong> ' + data.dataType + '</p>';
-            }
+            // Always show data type
+            const dataTypeDisplay = data.dataType || 'unknown';
+            html += '<p><strong>Data Type:</strong> ' + dataTypeDisplay + '</p>';
 
             if (data.isStable !== undefined) {
                 const stabilityText = data.isStable ? '✓ Stable' : '⚠ Unstable';

@@ -1,6 +1,8 @@
 package graph
 
 import (
+	"strings"
+
 	"github.com/rautio/react-analyzer/internal/analyzer"
 	"github.com/rautio/react-analyzer/internal/parser"
 )
@@ -239,15 +241,36 @@ func (b *Builder) buildStateNodes(module *analyzer.Module) error {
 		nodeType := node.Type()
 
 		// Look for variable_declarator with useState: const [count, setCount] = useState(0)
-		if nodeType == "variable_declarator" && currentComponent != nil {
+		// or useContext: const theme = useContext(ThemeContext)
+		// or createContext: const ThemeContext = createContext(defaultValue)
+		if nodeType == "variable_declarator" {
 			// Get the initializer (right side of =)
 			initializer := node.ChildByFieldName("value")
 			if initializer != nil && initializer.IsHookCall() {
 				callee := initializer.ChildByFieldName("function")
-				if callee != nil && callee.Text() == "useState" {
-					// Get the name pattern (left side of =)
+				if callee != nil {
+					hookName := callee.Text()
 					pattern := node.ChildByFieldName("name")
-					b.handleUseStateWithPattern(initializer, pattern, currentComponent, module.FilePath)
+
+					if hookName == "useState" && currentComponent != nil {
+						b.handleUseStateWithPattern(initializer, pattern, currentComponent, module.FilePath)
+					} else if hookName == "useContext" && currentComponent != nil {
+						// Extract context argument: useContext(ThemeContext)
+						args := initializer.ChildByFieldName("arguments")
+						var contextArg *parser.Node
+						if args != nil {
+							for _, child := range args.Children() {
+								if child.Type() != "(" && child.Type() != ")" && child.Type() != "," {
+									contextArg = child
+									break
+								}
+							}
+						}
+						b.handleUseContextWithPattern(initializer, pattern, contextArg, currentComponent, module.FilePath)
+					} else if hookName == "createContext" {
+						// createContext can be called at module level (currentComponent may be nil)
+						b.handleCreateContext(initializer, pattern, currentComponent, module.FilePath)
+					}
 				}
 			}
 		}
@@ -308,9 +331,15 @@ func (b *Builder) buildPropPassingEdges(module *analyzer.Module) error {
 	b.walkWithComponentContext(ast, module.FilePath, func(node *parser.Node, currentComponent *ComponentNode) bool {
 		nodeType := node.Type()
 
-		// Look for JSX elements (child component usage)
+		// Look for JSX elements (child component usage or Context.Provider)
 		if (nodeType == "jsx_element" || nodeType == "jsx_self_closing_element") && currentComponent != nil {
-			b.processJSXElement(node, currentComponent, module.FilePath)
+			// Check if this is a Context.Provider
+			fullName := b.getJSXComponentFullName(node)
+			if strings.HasSuffix(fullName, ".Provider") {
+				b.handleContextProvider(node, currentComponent, module.FilePath)
+			} else {
+				b.processJSXElement(node, currentComponent, module.FilePath)
+			}
 		}
 
 		return true
@@ -380,8 +409,8 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 			// Track ALL props being passed to child
 			propsPassedToChild = append(propsPassedToChild, propName)
 
-			// Infer prop data type from the value node
-			propDataType := b.inferPropDataType(valueNode)
+			// Infer prop data type from the value node (with context to look up state)
+			propDataType := b.inferPropDataTypeWithContext(valueNode, parentComp)
 
 			// Determine prop stability
 			isStable := b.isStableValue(valueNode)
@@ -736,6 +765,57 @@ func (b *Builder) extractProps(funcNode *parser.Node) []PropDefinition {
 }
 
 // inferPropDataType infers the data type of a prop from its JSX attribute value node
+// inferPropDataTypeWithContext infers data type with access to component context to look up state
+func (b *Builder) inferPropDataTypeWithContext(valueNode *parser.Node, parentComp *ComponentNode) DataType {
+	if valueNode == nil {
+		return DataTypeUnknown
+	}
+
+	// Handle jsx_expression wrapper
+	if valueNode.Type() == "jsx_expression" {
+		// Look at the child expression
+		for _, child := range valueNode.Children() {
+			// Skip braces
+			if child.Type() == "{" || child.Type() == "}" {
+				continue
+			}
+			return b.inferPropDataTypeWithContext(child, parentComp)
+		}
+		return DataTypeUnknown
+	}
+
+	// For identifiers, try to look up state nodes or incoming props
+	if valueNode.Type() == "identifier" {
+		varName := valueNode.Text()
+		// Check if this identifier is a state variable in the parent component
+		if parentComp != nil {
+			// First check state nodes
+			for _, stateID := range parentComp.StateNodes {
+				if stateNode, exists := b.graph.StateNodes[stateID]; exists {
+					if stateNode.Name == varName {
+						// Found the state node! Return its data type
+						return stateNode.DataType
+					}
+				}
+			}
+
+			// If not found in state, check if it's a prop being passed through
+			// Look for incoming "passes" edges to this component
+			for _, edge := range b.graph.Edges {
+				if edge.TargetID == parentComp.ID && edge.Type == EdgeTypePasses && edge.PropName == varName {
+					// Found an incoming edge with this prop name, return its data type
+					return edge.PropDataType
+				}
+			}
+		}
+		// Not found in state or props, return unknown
+		return DataTypeUnknown
+	}
+
+	// For everything else, use the basic inference
+	return b.inferPropDataType(valueNode)
+}
+
 func (b *Builder) inferPropDataType(valueNode *parser.Node) DataType {
 	if valueNode == nil {
 		return DataTypeUnknown
@@ -765,7 +845,8 @@ func (b *Builder) inferPropDataType(valueNode *parser.Node) DataType {
 	case "true", "false", "number", "string", "template_string":
 		return DataTypePrimitive
 	case "identifier":
-		// Can't determine type from identifier without type system
+		// Try to look up the identifier's type from state nodes
+		// This is handled by inferPropDataTypeWithContext
 		return DataTypeUnknown
 	case "member_expression":
 		// Can't determine type from member expression
@@ -901,6 +982,39 @@ func (b *Builder) getJSXComponentName(node *parser.Node) string {
 
 	// Find identifier
 	for _, child := range openingElement.Children() {
+		if child.Type() == "identifier" || child.Type() == "jsx_identifier" {
+			return child.Text()
+		}
+	}
+
+	return ""
+}
+
+// getJSXComponentFullName returns the full component name including member access
+// e.g., "ThemeContext.Provider" for <ThemeContext.Provider>
+func (b *Builder) getJSXComponentFullName(node *parser.Node) string {
+	// Get opening element
+	var openingElement *parser.Node
+	if node.Type() == "jsx_self_closing_element" {
+		openingElement = node
+	} else if node.Type() == "jsx_element" {
+		for _, child := range node.Children() {
+			if child.Type() == "jsx_opening_element" {
+				openingElement = child
+				break
+			}
+		}
+	}
+
+	if openingElement == nil {
+		return ""
+	}
+
+	// Look for member_expression (e.g., ThemeContext.Provider)
+	for _, child := range openingElement.Children() {
+		if child.Type() == "member_expression" {
+			return child.Text()
+		}
 		if child.Type() == "identifier" || child.Type() == "jsx_identifier" {
 			return child.Text()
 		}
@@ -1071,6 +1185,222 @@ func (b *Builder) handleUseStateWithPattern(useStateNode *parser.Node, pattern *
 		Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: component.Name},
 	}
 	b.graph.AddEdge(edge)
+}
+
+// handleUseContextWithPattern processes useContext hook calls
+// Example: const theme = useContext(ThemeContext)
+func (b *Builder) handleUseContextWithPattern(useContextNode *parser.Node, pattern *parser.Node, contextArg *parser.Node, component *ComponentNode, filePath string) {
+	line, col := useContextNode.StartPoint()
+
+	// Extract context identifier (e.g., "ThemeContext" from useContext(ThemeContext))
+	contextName := "UnknownContext"
+	if contextArg != nil && contextArg.Type() == "identifier" {
+		contextName = contextArg.Text()
+	}
+
+	// For now, we'll create a context state node if it doesn't exist
+	// Later, we'll link this to the actual createContext definition
+	contextStateID := GenerateStateID("", contextName, filePath, line+1)
+
+	// Check if context state node already exists
+	if _, exists := b.graph.StateNodes[contextStateID]; !exists {
+		// Create a placeholder context state node
+		// This will be replaced/updated when we find the actual createContext call
+		contextStateNode := &StateNode{
+			ID:       contextStateID,
+			Name:     contextName,
+			Type:     StateTypeContext,
+			DataType: DataTypeUnknown, // Will be inferred from createContext or Provider value
+			Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: component.Name},
+			Mutable:  false, // Context values are read-only in consumers
+		}
+		b.graph.AddStateNode(contextStateNode)
+	}
+
+	// Add "consumes" edge from component to context
+	edge := Edge{
+		ID:       GenerateEdgeID(EdgeTypeConsumes, component.ID, contextStateID),
+		SourceID: component.ID,
+		TargetID: contextStateID,
+		Type:     EdgeTypeConsumes,
+		Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: component.Name},
+	}
+	b.graph.AddEdge(edge)
+
+	// Track that this component consumes this state
+	component.ConsumedState = append(component.ConsumedState, contextStateID)
+}
+
+// handleCreateContext processes createContext calls
+// Example: const ThemeContext = createContext(defaultValue)
+func (b *Builder) handleCreateContext(createContextNode *parser.Node, pattern *parser.Node, component *ComponentNode, filePath string) {
+	line, col := createContextNode.StartPoint()
+
+	// Extract context name (e.g., "ThemeContext" from const ThemeContext = createContext(...))
+	contextName := "UnknownContext"
+	if pattern != nil && pattern.Type() == "identifier" {
+		contextName = pattern.Text()
+	}
+
+	// Infer data type from createContext default value
+	dataType := DataTypeUnknown
+	args := createContextNode.ChildByFieldName("arguments")
+	if args != nil {
+		// Get first argument (default value)
+		for _, child := range args.Children() {
+			if child.Type() != "(" && child.Type() != ")" && child.Type() != "," {
+				dataType = b.inferPropDataType(child)
+				break
+			}
+		}
+	}
+
+	// Generate consistent ID for this context
+	contextStateID := GenerateStateID("", contextName, filePath, line+1)
+
+	// Create or update the context state node
+	contextStateNode := &StateNode{
+		ID:       contextStateID,
+		Name:     contextName,
+		Type:     StateTypeContext,
+		DataType: dataType,
+		Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: component.Name},
+		Mutable:  false, // Context itself is not mutable (though its value can change)
+	}
+
+	// Check if placeholder already exists and update it, or add new one
+	if existing, exists := b.graph.StateNodes[contextStateID]; exists {
+		// Update the existing placeholder with real information
+		existing.DataType = dataType
+		existing.Location = contextStateNode.Location
+	} else {
+		b.graph.AddStateNode(contextStateNode)
+	}
+
+	// Add "defines" edge from component to context (if component context exists)
+	// Note: createContext is often called at module level, so component might be nil
+	if component != nil {
+		edge := Edge{
+			ID:       GenerateEdgeID(EdgeTypeDefines, component.ID, contextStateID),
+			SourceID: component.ID,
+			TargetID: contextStateID,
+			Type:     EdgeTypeDefines,
+			Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: component.Name},
+		}
+		b.graph.AddEdge(edge)
+		component.StateNodes = append(component.StateNodes, contextStateID)
+	}
+}
+
+// handleContextProvider processes Context.Provider JSX elements
+// Example: <ThemeContext.Provider value={themeValue}>
+func (b *Builder) handleContextProvider(jsxNode *parser.Node, component *ComponentNode, filePath string) {
+	line, col := jsxNode.StartPoint()
+
+	// Get full component name (e.g., "ThemeContext.Provider")
+	fullName := b.getJSXComponentFullName(jsxNode)
+	if !strings.HasSuffix(fullName, ".Provider") {
+		return
+	}
+
+	// Extract context name (e.g., "ThemeContext" from "ThemeContext.Provider")
+	contextName := strings.TrimSuffix(fullName, ".Provider")
+	if contextName == "" {
+		return
+	}
+
+	// Find the context state node
+	var contextStateID string
+	for id, stateNode := range b.graph.StateNodes {
+		if stateNode.Name == contextName && stateNode.Type == StateTypeContext {
+			contextStateID = id
+			break
+		}
+	}
+
+	// If context doesn't exist yet, create a placeholder
+	if contextStateID == "" {
+		contextStateID = GenerateStateID("", contextName, filePath, line+1)
+		contextStateNode := &StateNode{
+			ID:       contextStateID,
+			Name:     contextName,
+			Type:     StateTypeContext,
+			DataType: DataTypeUnknown,
+			Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: component.Name},
+			Mutable:  false,
+		}
+		b.graph.AddStateNode(contextStateNode)
+	}
+
+	// Get opening element to extract value prop
+	var openingElement *parser.Node
+	if jsxNode.Type() == "jsx_self_closing_element" {
+		openingElement = jsxNode
+	} else if jsxNode.Type() == "jsx_element" {
+		for _, child := range jsxNode.Children() {
+			if child.Type() == "jsx_opening_element" {
+				openingElement = child
+				break
+			}
+		}
+	}
+
+	if openingElement == nil {
+		return
+	}
+
+	// Look for value attribute
+	for _, child := range openingElement.Children() {
+		if child.Type() == "jsx_attribute" {
+			var propName string
+			var valueNode *parser.Node
+			for _, attrChild := range child.Children() {
+				if attrChild.Type() == "property_identifier" {
+					propName = attrChild.Text()
+				} else if attrChild.Type() == "jsx_expression" {
+					valueNode = attrChild
+				}
+			}
+
+			if propName == "value" && valueNode != nil {
+				// Infer data type from the value
+				propDataType := b.inferPropDataTypeWithContext(valueNode, component)
+
+				// Update context state node with inferred data type if it was unknown
+				if contextState, exists := b.graph.StateNodes[contextStateID]; exists {
+					if contextState.DataType == DataTypeUnknown {
+						contextState.DataType = propDataType
+					}
+				}
+
+				// Determine value stability
+				isStable := b.isStableValue(valueNode)
+				stabilityReason := b.getStabilityReason(valueNode)
+
+				// Create "defines" edge from provider component to context state
+				// This represents the component providing the context value
+				edge := Edge{
+					ID:              GenerateEdgeIDWithProp(EdgeTypeDefines, component.ID, contextStateID, "value"),
+					SourceID:        component.ID,
+					TargetID:        contextStateID,
+					Type:            EdgeTypeDefines,
+					PropName:        "value",
+					PropDataType:    propDataType,
+					IsStable:        isStable,
+					StabilityReason: stabilityReason,
+					Location:        Location{FilePath: filePath, Line: line + 1, Column: col, Component: component.Name},
+				}
+				b.graph.AddEdge(edge)
+
+				// Track in component
+				if !contains(component.StateNodes, contextStateID) {
+					component.StateNodes = append(component.StateNodes, contextStateID)
+				}
+
+				break
+			}
+		}
+	}
 }
 
 // getComponentNameFromArrowFunction extracts component name from arrow function variable declarator
