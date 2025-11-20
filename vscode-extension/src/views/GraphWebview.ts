@@ -118,7 +118,16 @@ export class GraphWebview {
             console.error('Full error:', error);
 
             const errorMsg = error instanceof Error ? error.message : String(error);
-            vscode.window.showErrorMessage(`Failed to generate graph: ${errorMsg}`);
+            // Show error in both notification and output channel for better visibility
+            vscode.window.showErrorMessage(`Failed to generate graph - check Output panel for details`);
+            console.error('=== FULL ERROR FOR USER ===');
+            console.error(errorMsg);
+
+            // Also display error in the webview
+            this._panel.webview.postMessage({
+                type: 'showError',
+                error: errorMsg
+            });
         }
     }
 
@@ -166,13 +175,16 @@ export class GraphWebview {
 
                 if (code !== null && code !== 0) {
                     console.error(`CLI failed with exit code ${code}`);
-                    reject(new Error(`CLI exited with code ${code}. stderr: ${stderr || 'none'}. stdout: ${stdout.substring(0, 200)}`));
+                    // Extract the most relevant error message from stderr
+                    const errorDetails = stderr || stdout.substring(0, 500) || 'No error details available';
+                    reject(new Error(`Parse Error:\n${errorDetails}`));
                     return;
                 }
 
                 if (!stdout || stdout.trim().length === 0) {
                     console.error('CLI returned empty output');
-                    reject(new Error(`CLI returned no output. stderr: ${stderr || 'none'}`));
+                    const errorDetails = stderr || 'No error details available';
+                    reject(new Error(`No graph output received.\nError: ${errorDetails}`));
                     return;
                 }
 
@@ -453,8 +465,20 @@ export class GraphWebview {
                     console.log('Metadata keys:', Object.keys(message.metadata || {}).length);
                     await renderGraph(message.mermaid, message.metadata);
                     break;
+                case 'showError':
+                    console.error('Graph generation error:', message.error);
+                    showError(message.error);
+                    break;
             }
         });
+
+        function showError(errorMessage) {
+            const container = document.getElementById('mermaid-graph');
+            container.innerHTML = '<div style="padding: 20px; color: #ef4444; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 4px; white-space: pre-wrap; font-family: monospace; font-size: 12px;">' +
+                '<strong style="display: block; margin-bottom: 10px; font-size: 14px;">Error generating graph:</strong>' +
+                errorMessage +
+                '</div>';
+        }
 
         async function renderGraph(mermaidSyntax, meta) {
             metadata = meta;
