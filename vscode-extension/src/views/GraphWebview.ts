@@ -370,9 +370,11 @@ export class GraphWebview {
 <body>
     <div class="toolbar">
         <span style="font-size: 11px; font-weight: bold;">Layout:</span>
-        <select id="layout-direction" style="font-size: 11px; margin-left: 4px; padding: 2px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border);">
-            <option value="LR" selected>Left→Right</option>
-            <option value="TB">Top→Down</option>
+        <select id="layout-algorithm" style="font-size: 11px; margin-left: 4px; padding: 2px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border);">
+            <option value="dagre-smart" selected>Dagre (Smart)</option>
+            <option value="dagre-lr">Dagre (Left→Right)</option>
+            <option value="dagre-tb">Dagre (Top→Down)</option>
+            <option value="grid">Grid</option>
         </select>
         <button id="zoom-in" title="Zoom In">+</button>
         <button id="zoom-out" title="Zoom Out">−</button>
@@ -862,18 +864,153 @@ export class GraphWebview {
         }
 
         function runLayout() {
-            const layoutDir = document.getElementById('layout-direction').value;
+            const layoutAlgo = document.getElementById('layout-algorithm').value;
 
-            cy.layout({
-                name: 'dagre',
-                rankDir: layoutDir,
-                nodeSep: 80,
-                rankSep: 100,
-                padding: 50,
-                animate: true,
-                animationDuration: 500,
-                fit: true
-            }).run();
+            if (layoutAlgo === 'grid') {
+                // Simple grid layout
+                cy.layout({
+                    name: 'grid',
+                    padding: 50,
+                    animate: true,
+                    animationDuration: 500,
+                    fit: true,
+                    avoidOverlap: true,
+                    avoidOverlapPadding: 40
+                }).run();
+            } else if (layoutAlgo === 'dagre-smart') {
+                // Smart layout: detect connected components and position them
+                runSmartLayout();
+            } else {
+                // Standard dagre layouts
+                const rankDir = layoutAlgo === 'dagre-lr' ? 'LR' : 'TB';
+                cy.layout({
+                    name: 'dagre',
+                    rankDir: rankDir,
+                    nodeSep: 80,
+                    rankSep: 100,
+                    padding: 50,
+                    animate: true,
+                    animationDuration: 500,
+                    fit: true
+                }).run();
+            }
+        }
+
+        function runSmartLayout() {
+            // Get all connected components
+            const components = cy.elements().components();
+
+            // If only one component, use standard dagre
+            if (components.length === 1) {
+                cy.layout({
+                    name: 'dagre',
+                    rankDir: 'LR',
+                    nodeSep: 80,
+                    rankSep: 100,
+                    padding: 50,
+                    animate: true,
+                    animationDuration: 500,
+                    fit: true
+                }).run();
+                return;
+            }
+
+            // Sort components by size (largest first)
+            components.sort((a, b) => b.length - a.length);
+
+            // Determine layout direction based on aspect ratio
+            const container = cy.container();
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            const aspectRatio = width / height;
+
+            // If wide screen, prefer vertical stacking; if tall, prefer horizontal
+            const useVerticalStacking = aspectRatio > 1.5;
+
+            // Layout each component separately
+            const componentBounds = [];
+            components.forEach((component, idx) => {
+                // Determine orientation: alternate or based on component size
+                let rankDir = 'LR';
+                if (useVerticalStacking) {
+                    // Stack vertically, so each component goes left-right
+                    rankDir = 'LR';
+                } else {
+                    // Stack horizontally, so each component goes top-down
+                    rankDir = 'TB';
+                }
+
+                // For variety, alternate direction for smaller components
+                if (idx > 0 && component.length < 5) {
+                    rankDir = rankDir === 'LR' ? 'TB' : 'LR';
+                }
+
+                const layout = component.layout({
+                    name: 'dagre',
+                    rankDir: rankDir,
+                    nodeSep: 80,
+                    rankSep: 100,
+                    padding: 20,
+                    animate: false,
+                    fit: false
+                });
+
+                layout.run();
+
+                // Get bounding box of this component
+                const bb = component.boundingBox();
+                componentBounds.push({ component, bb, rankDir });
+            });
+
+            // Now position components to avoid overlap
+            let currentX = 50;
+            let currentY = 50;
+            let rowMaxHeight = 0;
+            let rowWidth = 0;
+            const maxRowWidth = useVerticalStacking ? width * 0.9 : width * 1.5;
+
+            componentBounds.forEach(({ component, bb, rankDir }, idx) => {
+                const compWidth = bb.w + 100; // Add padding
+                const compHeight = bb.h + 100;
+
+                // Check if we need to wrap to next row/column
+                if (idx > 0 && rowWidth + compWidth > maxRowWidth) {
+                    // Move to next row
+                    currentY += rowMaxHeight + 50;
+                    currentX = 50;
+                    rowWidth = 0;
+                    rowMaxHeight = 0;
+                }
+
+                // Calculate offset to move component to target position
+                const offsetX = currentX - bb.x1;
+                const offsetY = currentY - bb.y1;
+
+                // Move all nodes in this component
+                component.nodes().forEach(node => {
+                    const pos = node.position();
+                    node.position({
+                        x: pos.x + offsetX,
+                        y: pos.y + offsetY
+                    });
+                });
+
+                // Update position for next component
+                if (useVerticalStacking) {
+                    rowWidth += compWidth;
+                    currentX += compWidth + 50;
+                    rowMaxHeight = Math.max(rowMaxHeight, compHeight);
+                } else {
+                    currentY += compHeight + 50;
+                    rowMaxHeight = compHeight;
+                }
+            });
+
+            // Animate and fit
+            cy.animate({
+                fit: { padding: 50 },
+                duration: 500
+            });
         }
 
         function showNodeDetails(node) {
@@ -1157,7 +1294,7 @@ export class GraphWebview {
         }
 
         // Event handlers
-        document.getElementById('layout-direction').addEventListener('change', runLayout);
+        document.getElementById('layout-algorithm').addEventListener('change', runLayout);
         document.getElementById('zoom-in').addEventListener('click', () => {
             const zoom = cy.zoom();
             cy.zoom({
