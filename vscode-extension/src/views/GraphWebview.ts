@@ -401,8 +401,8 @@ export class GraphWebview {
         <input id="search" type="text" placeholder="Search components..." />
         <span style="margin-left: 8px; font-size: 11px; font-weight: bold;">Layout:</span>
         <select id="layout-direction" style="font-size: 11px; margin-left: 4px; padding: 2px;">
-            <option value="LR">Horizontal (LR)</option>
-            <option value="TD">Vertical (TD)</option>
+            <option value="LR" selected>Left→Right (LR)</option>
+            <option value="TD">Top↓Down (TD)</option>
         </select>
         <span style="margin-left: 12px; font-size: 11px; font-weight: bold;">Show:</span>
         <label style="font-size: 11px; margin-left: 4px;">
