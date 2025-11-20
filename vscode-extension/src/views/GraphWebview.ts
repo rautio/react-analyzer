@@ -400,8 +400,8 @@ export class GraphWebview {
     <div class="toolbar">
         <span style="font-size: 11px; font-weight: bold;">Layout:</span>
         <select id="layout-direction" style="font-size: 11px; margin-left: 4px; padding: 2px;">
-            <option value="LR" selected>Left→Right (LR)</option>
-            <option value="TD">Top↓Down (TD)</option>
+            <option value="TD" selected>Top↓Down (TD)</option>
+            <option value="LR">Left→Right (LR)</option>
         </select>
         <label style="font-size: 11px; margin-left: 12px;">
             <input type="checkbox" id="show-edges" checked /> Show Edges
