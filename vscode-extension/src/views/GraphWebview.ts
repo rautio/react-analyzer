@@ -107,7 +107,10 @@ export class GraphWebview {
 
     private async getMermaidDiagram(filePath: string): Promise<string> {
         return new Promise((resolve, reject) => {
-            const args = ['-mermaid', filePath];
+            // Analyze the directory containing the file (like analyzeFile does)
+            // This enables cross-file analysis and proper parsing
+            const dirPath = path.dirname(filePath);
+            const args = ['-mermaid', dirPath];
 
             console.log(`Running: ${this._cliPath} ${args.join(' ')}`);
 
@@ -356,6 +359,19 @@ export class GraphWebview {
 <body>
     <div class="toolbar">
         <input id="search" type="text" placeholder="Search components..." />
+        <span style="margin-left: 8px; font-size: 11px; font-weight: bold;">Show:</span>
+        <label style="font-size: 11px; margin-left: 4px;">
+            <input type="checkbox" id="filter-state" checked /> State
+        </label>
+        <label style="font-size: 11px;">
+            <input type="checkbox" id="filter-passthrough" checked /> Passthrough
+        </label>
+        <label style="font-size: 11px;">
+            <input type="checkbox" id="filter-regular" checked /> Regular
+        </label>
+        <label style="font-size: 11px; margin-left: 8px;">
+            <input type="checkbox" id="show-edges" checked /> Edges
+        </label>
         <button id="zoom-in" title="Zoom In">➕</button>
         <button id="zoom-out" title="Zoom Out">➖</button>
         <button id="fit-screen" title="Fit to Screen">⛶</button>
@@ -439,9 +455,18 @@ export class GraphWebview {
 
                 if (!meta) return;
 
-                // Add CSS class for styling
+                // Add CSS class for styling and filtering
                 node.classList.add(meta.type);
                 if (meta.memoized) node.classList.add('memoized');
+
+                // Add node type class for filtering
+                if (meta.nodeType === 'state') {
+                    node.classList.add('filter-state-node');
+                } else if (meta.type === 'passthrough') {
+                    node.classList.add('filter-passthrough-node');
+                } else if (meta.type === 'regular') {
+                    node.classList.add('filter-regular-node');
+                }
 
                 // Click handler
                 node.addEventListener('click', () => {
@@ -461,6 +486,8 @@ export class GraphWebview {
 
                 // Store metadata for search
                 node.setAttribute('data-name', nodeId);
+                node.setAttribute('data-nodetype', meta.nodeType || 'component');
+                node.setAttribute('data-type', meta.type);
             });
 
             // Enable zoom/pan
@@ -684,6 +711,71 @@ export class GraphWebview {
 
         document.getElementById('close-detail').addEventListener('click', () => {
             hideDetailPanel();
+        });
+
+        // Filter controls
+        function applyFilters() {
+            const showState = document.getElementById('filter-state').checked;
+            const showPassthrough = document.getElementById('filter-passthrough').checked;
+            const showRegular = document.getElementById('filter-regular').checked;
+
+            document.querySelectorAll('.node').forEach(node => {
+                const nodeType = node.getAttribute('data-nodetype');
+                const type = node.getAttribute('data-type');
+
+                let visible = true;
+
+                if (nodeType === 'state' && !showState) {
+                    visible = false;
+                } else if (type === 'passthrough' && !showPassthrough) {
+                    visible = false;
+                } else if (type === 'regular' && !showRegular) {
+                    visible = false;
+                }
+
+                node.style.display = visible ? '' : 'none';
+            });
+
+            // Also hide/show connected edges
+            document.querySelectorAll('.edgePath').forEach(edge => {
+                const edgeId = edge.getAttribute('id');
+                if (!edgeId) return;
+
+                // Check if any connected node is hidden
+                const match = edgeId.match(/flowchart-([^-]+)-([^-]+)/);
+                if (match) {
+                    const [, fromId, toId] = match;
+                    const fromNode = document.getElementById(fromId);
+                    const toNode = document.getElementById(toId);
+
+                    const fromHidden = fromNode && fromNode.style.display === 'none';
+                    const toHidden = toNode && toNode.style.display === 'none';
+
+                    edge.style.display = (fromHidden || toHidden) ? 'none' : '';
+                }
+            });
+
+            // Hide edge labels for hidden edges
+            document.querySelectorAll('.edgeLabel').forEach(label => {
+                const parentEdge = label.closest('.edgePath');
+                if (parentEdge && parentEdge.style.display === 'none') {
+                    label.style.display = 'none';
+                } else {
+                    label.style.display = '';
+                }
+            });
+        }
+
+        document.getElementById('filter-state').addEventListener('change', applyFilters);
+        document.getElementById('filter-passthrough').addEventListener('change', applyFilters);
+        document.getElementById('filter-regular').addEventListener('change', applyFilters);
+
+        // Edge visibility toggle
+        document.getElementById('show-edges').addEventListener('change', (e) => {
+            const showEdges = e.target.checked;
+            document.querySelectorAll('.edgePath, .edgeLabel').forEach(el => {
+                el.style.display = showEdges ? '' : 'none';
+            });
         });
     </script>
 </body>

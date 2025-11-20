@@ -11,7 +11,7 @@ import (
 func (g *Graph) ToMermaid() string {
 	var sb strings.Builder
 
-	// Write header
+	// Write header - use TD (top-down) for vertical layout
 	sb.WriteString("flowchart TD\n")
 
 	// Track written nodes to avoid duplicates
