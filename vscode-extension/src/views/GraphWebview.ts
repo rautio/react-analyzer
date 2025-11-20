@@ -353,12 +353,6 @@ export class GraphWebview {
             transition: all 0.2s ease;
         }
 
-        /* Highlighted state */
-        .mermaid .node.highlighted rect {
-            stroke: #ef4444 !important;
-            stroke-width: 4px !important;
-        }
-
         .detail-panel {
             position: fixed;
             right: 0;
@@ -439,7 +433,6 @@ export class GraphWebview {
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
         let metadata = {};
-        let currentHighlights = [];
         let originalMermaidSyntax = '';  // Store original syntax for layout switching
 
         // Initialize Mermaid
@@ -536,22 +529,6 @@ export class GraphWebview {
                 } else if (meta.type === 'regular') {
                     node.classList.add('filter-regular-node');
                 }
-
-                // Click handler
-                node.addEventListener('click', () => {
-                    // Jump to source
-                    vscode.postMessage({
-                        type: 'jumpToSource',
-                        file: meta.file,
-                        line: meta.line
-                    });
-
-                    // Show detail panel
-                    showDetailPanel(nodeId, meta);
-
-                    // Highlight connected nodes
-                    highlightConnectedNodes(nodeId);
-                });
 
                 // Store metadata for search
                 node.setAttribute('data-name', nodeId);
@@ -672,37 +649,6 @@ export class GraphWebview {
             panY = (containerRect.height - svgRect.height * currentZoom) / 2;
 
             updateTransform();
-        }
-
-        function highlightConnectedNodes(nodeId) {
-            // Clear previous highlights
-            clearHighlights();
-
-            const svg = document.querySelector('.mermaid svg');
-            if (!svg) return;
-
-            // Find edges connected to this node
-            svg.querySelectorAll('.edgePath').forEach(edge => {
-                const edgeId = edge.getAttribute('id');
-                if (edgeId && edgeId.includes(nodeId)) {
-                    // Extract connected node ID
-                    const match = edgeId.match(/flowchart-([^-]+)-([^-]+)/);
-                    if (match) {
-                        const [, from, to] = match;
-                        const connectedId = from === nodeId ? to : from;
-                        const connectedNode = document.getElementById(connectedId);
-                        if (connectedNode) {
-                            connectedNode.classList.add('highlighted');
-                            currentHighlights.push(connectedNode);
-                        }
-                    }
-                }
-            });
-        }
-
-        function clearHighlights() {
-            currentHighlights.forEach(node => node.classList.remove('highlighted'));
-            currentHighlights = [];
         }
 
         function showDetailPanel(nodeId, meta) {
