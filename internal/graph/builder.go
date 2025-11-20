@@ -421,6 +421,7 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 
 			// Extract source variable for member expressions (e.g., "config" from "config.threshold")
 			propSourceVar := ""
+			propSourceIdent := ""
 			if valueNode.Type() == "jsx_expression" {
 				for _, exprChild := range valueNode.Children() {
 					if exprChild.Type() == "member_expression" {
@@ -429,6 +430,16 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 							propSourceVar = objectName
 							break
 						}
+					}
+
+					// Extract source identifier for renamed props (e.g., "onRemove" from onHandler={onRemove})
+					if exprChild.Type() == "identifier" {
+						identName := exprChild.Text()
+						// Only store if renamed (different from propName)
+						if identName != propName {
+							propSourceIdent = identName
+						}
+						// Don't break - member_expression takes priority
 					}
 				}
 			}
@@ -443,6 +454,7 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 				PropName:          propName,
 				PropDataType:      propDataType,
 				PropSourceVar:     propSourceVar,
+				PropSourceIdent:   propSourceIdent,
 				IsStable:          isStable,
 				StabilityReason:   stabilityReason,
 				BreaksMemoization: breaksMemo,

@@ -34,16 +34,16 @@ func DetectPropDrilling(g *Graph, minPassthroughComponents int) []PropDrillingVi
 
 	// For each origin, trace where it flows
 	for stateID, origin := range origins {
-		// Find all components that consume this state
-		consumers := findPropConsumers(stateID, g)
+		// Find all components that consume this state (including through renaming)
+		consumersWithNames := findPropConsumersWithNames(stateID, g)
 
 		// Only report violations for leaf consumers (deepest in the chain)
 		// to avoid reporting multiple violations for the same prop drilling path
-		leafConsumers := findLeafConsumers(consumers, origin.Name, g)
+		leafConsumers := findLeafConsumersWithNames(consumersWithNames, g)
 
 		// For each leaf consumer, trace the path from origin to consumer
 		for _, consumer := range leafConsumers {
-			path := tracePropPath(origin, consumer, g)
+			path := tracePropPath(origin, consumer.comp, g)
 
 			// Violation if there are enough passthrough components
 			// A passthrough component is one that receives a prop and passes it down
@@ -53,7 +53,7 @@ func DetectPropDrilling(g *Graph, minPassthroughComponents int) []PropDrillingVi
 				violation := PropDrillingViolation{
 					PropName:              origin.Name,
 					Origin:                origin.Location,
-					Consumer:              consumer.Location,
+					Consumer:              consumer.comp.Location,
 					PassthroughCount:      len(path.PassthroughPath),
 					PassthroughComponents: buildComponentReferences(path.PassthroughPath),
 					Depth:                 path.Depth,
@@ -94,19 +94,29 @@ func findPropOrigins(g *Graph) map[string]*StateNode {
 	return origins
 }
 
-// findLeafConsumers filters consumers to only include leaf nodes
+// consumerWithName tracks a component and the current name of the prop at that component
+type consumerWithName struct {
+	comp        *ComponentNode
+	propNameNow string
+}
+
+// findLeafConsumersWithNames filters consumers to only include leaf nodes
 // (components that don't pass this prop to any children)
-func findLeafConsumers(consumers []*ComponentNode, propName string, g *Graph) []*ComponentNode {
-	var leafConsumers []*ComponentNode
+func findLeafConsumersWithNames(consumers []consumerWithName, g *Graph) []consumerWithName {
+	var leafConsumers []consumerWithName
 
 	for _, consumer := range consumers {
 		// Check if this consumer passes the prop to any child
+		// We check if any outgoing edge passes the prop (by current name or as source ident)
 		hasOutgoingProp := false
-		outgoingEdges := g.GetOutgoingEdges(consumer.ID)
+		outgoingEdges := g.GetOutgoingEdges(consumer.comp.ID)
 		for _, edge := range outgoingEdges {
-			if edge.Type == EdgeTypePasses && edge.PropName == propName {
-				hasOutgoingProp = true
-				break
+			if edge.Type == EdgeTypePasses {
+				// Check if this edge passes our tracked prop
+				if edge.PropName == consumer.propNameNow || edge.PropSourceIdent == consumer.propNameNow {
+					hasOutgoingProp = true
+					break
+				}
 			}
 		}
 
@@ -119,16 +129,17 @@ func findLeafConsumers(consumers []*ComponentNode, propName string, g *Graph) []
 	return leafConsumers
 }
 
-// findPropConsumers finds all components in the prop flow chain for a specific prop
-func findPropConsumers(propID string, g *Graph) []*ComponentNode {
-	var consumers []*ComponentNode
+// findPropConsumersWithNames finds all components in the prop flow chain for a specific prop
+// and tracks the current name of the prop at each component (may differ due to renaming)
+func findPropConsumersWithNames(propID string, g *Graph) []consumerWithName {
+	var consumers []consumerWithName
 
 	// Get the state node to find the prop name
 	stateNode, exists := g.StateNodes[propID]
 	if !exists {
 		return consumers
 	}
-	propName := stateNode.Name
+	initialPropName := stateNode.Name
 
 	// Start from the origin component
 	originComp, err := g.FindStateOrigin(propID)
@@ -137,33 +148,51 @@ func findPropConsumers(propID string, g *Graph) []*ComponentNode {
 	}
 
 	// Use BFS to find all components that receive this specific prop
+	// Track both component ID and the current prop name at that component
+	type queueItem struct {
+		compID      string
+		propNameNow string // The name of the prop at this component (may differ due to renaming)
+	}
+
 	visited := make(map[string]bool)
-	queue := []string{originComp.ID}
+	queue := []queueItem{{compID: originComp.ID, propNameNow: initialPropName}}
 
 	for len(queue) > 0 {
-		currentCompID := queue[0]
+		current := queue[0]
 		queue = queue[1:]
 
-		if visited[currentCompID] {
+		if visited[current.compID] {
 			continue
 		}
-		visited[currentCompID] = true
+		visited[current.compID] = true
 
 		// Check all "passes" edges from this component
-		outgoingEdges := g.GetOutgoingEdges(currentCompID)
+		outgoingEdges := g.GetOutgoingEdges(current.compID)
 		for _, edge := range outgoingEdges {
-			// Only follow edges that pass THIS specific prop
-			if edge.Type == EdgeTypePasses && edge.PropName == propName {
-				// This component passes our specific prop to a child
-				targetComp, exists := g.ComponentNodes[edge.TargetID]
-				if !exists {
-					continue
-				}
+			// Only follow edges that pass THIS specific prop (by name or source identifier for renamed props)
+			if edge.Type == EdgeTypePasses {
+				// Match by prop name OR source identifier (handles renaming)
+				// We need to check if this edge passes the prop we're tracking
+				matches := edge.PropName == current.propNameNow || edge.PropSourceIdent == current.propNameNow
+				if matches {
+					// This component passes our specific prop to a child
+					targetComp, exists := g.ComponentNodes[edge.TargetID]
+					if !exists {
+						continue
+					}
 
-				// Add the child component as a consumer
-				if !visited[edge.TargetID] {
-					consumers = append(consumers, targetComp)
-					queue = append(queue, edge.TargetID)
+					// Add the child component as a consumer
+					if !visited[edge.TargetID] {
+						consumers = append(consumers, consumerWithName{
+							comp:        targetComp,
+							propNameNow: edge.PropName, // Use the new name at this component
+						})
+						// Continue tracking with the NEW prop name (it may have been renamed)
+						queue = append(queue, queueItem{
+							compID:      edge.TargetID,
+							propNameNow: edge.PropName, // Use the new name going forward
+						})
+					}
 				}
 			}
 		}

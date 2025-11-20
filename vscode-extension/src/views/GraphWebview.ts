@@ -825,7 +825,8 @@ export class GraphWebview {
                         isStable: edge.isStable,
                         stabilityReason: edge.stabilityReason,
                         breaksMemoization: edge.breaksMemoization,
-                        propSourceVar: edge.propSourceVar || ''
+                        propSourceVar: edge.propSourceVar || '',
+                        propSourceIdent: edge.propSourceIdent || ''
                     },
                     classes: classes.join(' ')
                 });
@@ -945,6 +946,16 @@ export class GraphWebview {
                 }
             }
 
+            // Show prop renaming information
+            if (data.propSourceIdent) {
+                const currentPropName = data.label.split(' ')[0];
+                html += '<hr style="margin: 12px 0; border: none; border-top: 1px solid var(--vscode-panel-border);">';
+                html += '<p style="margin: 4px 0;"><strong>🔄 Prop Renamed</strong></p>';
+                html += '<p style="font-size: 11px; color: var(--vscode-descriptionForeground); margin: 4px 0;">Renamed from: <code style="background: var(--vscode-textCodeBlock-background); padding: 2px 4px; border-radius: 3px;">' + data.propSourceIdent + '</code></p>';
+                html += '<p style="font-size: 11px; color: var(--vscode-descriptionForeground); margin: 4px 0;">Renamed to: <code style="background: var(--vscode-textCodeBlock-background); padding: 2px 4px; border-radius: 3px;">' + currentPropName + '</code></p>';
+                html += '<p style="font-size: 10px; color: var(--vscode-descriptionForeground); margin-top: 8px; font-style: italic;">Chain highlighting will track this prop across both names.</p>';
+            }
+
             if (data.breaksMemoization) {
                 html += '<p style="color: var(--vscode-errorForeground); font-weight: bold;">⚠ BREAKS MEMOIZATION</p>';
                 html += '<p style="font-size: 11px; line-height: 1.4;">This unstable prop is passed to a React.memo component, which will cause unnecessary re-renders.</p>';
@@ -1010,9 +1021,15 @@ export class GraphWebview {
         function traceUpstream(node, originEdge, propName) {
             const collection = cy.collection();
 
-            // If the origin edge has a propSourceVar (member expression), look for that instead
+            // Determine what prop name to look for upstream
+            // Priority: propSourceVar (member expression) > propSourceIdent (renamed) > propName
             const originData = originEdge.data();
-            const lookupProp = originData.propSourceVar || propName;
+            let lookupProp = propName;
+            if (originData.propSourceVar) {
+                lookupProp = originData.propSourceVar;
+            } else if (originData.propSourceIdent) {
+                lookupProp = originData.propSourceIdent;
+            }
 
             // Get incoming edges (edges pointing TO this node)
             const incomingEdges = node.incomers('edge[edgeType="passes"], edge[edgeType="defines"]');
@@ -1026,7 +1043,13 @@ export class GraphWebview {
                 // For "passes" edges, check if it matches our lookup prop
                 if (edge.data('edgeType') === 'passes') {
                     const edgePropName = edge.data('label').split(' ')[0];
-                    if (edgePropName !== lookupProp) {
+                    const edgeData = edge.data();
+
+                    // Match if the edge's prop name OR its source identifier matches our lookup prop
+                    const matches = edgePropName === lookupProp ||
+                                  (edgeData.propSourceIdent && edgeData.propSourceIdent === lookupProp);
+
+                    if (!matches) {
                         return; // Skip this edge, it's for a different prop
                     }
 
@@ -1060,23 +1083,35 @@ export class GraphWebview {
                     return;
                 }
 
-                // For "passes" edges, only follow if it's the same prop
+                // For "passes" edges, only follow if it's the same prop (or renamed)
                 if (edge.data('edgeType') === 'passes') {
                     const edgePropName = edge.data('label').split(' ')[0];
-                    if (edgePropName !== propName) {
+                    const edgeData = edge.data();
+
+                    // Match if the edge's prop name matches OR if the edge's source identifier matches
+                    const matches = edgePropName === propName ||
+                                  (edgeData.propSourceIdent && edgeData.propSourceIdent === propName);
+
+                    if (!matches) {
                         return; // Skip this edge, it's for a different prop
                     }
+
+                    // Add this edge and its target
+                    collection.merge(edge);
+                    const targetNode = edge.target();
+                    collection.merge(targetNode);
+
+                    // Continue tracing downstream with the edge's prop name (may be renamed)
+                    collection.merge(traceDownstream(targetNode, edge, edgePropName));
+                } else if (edge.data('edgeType') === 'consumes') {
+                    // For "consumes" edges, always follow (these connect to state consumers)
+                    collection.merge(edge);
+                    const targetNode = edge.target();
+                    collection.merge(targetNode);
+
+                    // Recursively trace downstream from the target
+                    collection.merge(traceDownstream(targetNode, edge, propName));
                 }
-
-                // For "consumes" edges, always follow (these connect to state consumers)
-
-                // Add this edge and its target
-                collection.merge(edge);
-                const targetNode = edge.target();
-                collection.merge(targetNode);
-
-                // Recursively trace downstream from the target
-                collection.merge(traceDownstream(targetNode, edge, propName));
             });
 
             return collection;

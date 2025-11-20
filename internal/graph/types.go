@@ -96,6 +96,7 @@ type Edge struct {
 	PropName          string   `json:"propName"`          // For passes edges
 	PropDataType      DataType `json:"propDataType"`      // Data type of prop (for passes edges)
 	PropSourceVar     string   `json:"propSourceVar"`     // For member expressions: the source variable (e.g., "config" for "config.threshold")
+	PropSourceIdent   string   `json:"propSourceIdent"`   // For renamed props: the source identifier (e.g., "onRemove" from onHandler={onRemove})
 	IsStable          bool     `json:"isStable"`          // Is the passed prop value stable? (useMemo/useCallback/constant)
 	StabilityReason   string   `json:"stabilityReason"`   // Why stable/unstable: "inline", "useMemo", "useCallback", "constant", "unknown"
 	BreaksMemoization bool     `json:"breaksMemoization"` // Does this edge break the target's memoization?
