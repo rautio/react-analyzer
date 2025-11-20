@@ -82,16 +82,28 @@ export class GraphWebview {
 
     public async updateGraph(filePath: string) {
         try {
+            console.log('=== Graph Generation Debug ===');
+            console.log('File path:', filePath);
+
             // Run CLI to get Mermaid output
             const mermaidOutput = await this.getMermaidDiagram(filePath);
 
             console.log('Mermaid output length:', mermaidOutput.length);
-            console.log('Mermaid output preview:', mermaidOutput.substring(0, 100));
+            console.log('Mermaid output preview:', mermaidOutput.substring(0, 200));
+            console.log('Mermaid output (full):', mermaidOutput);
+
+            // Check if output is actually Mermaid
+            if (!mermaidOutput.includes('flowchart')) {
+                console.error('ERROR: Output does not contain flowchart syntax');
+                console.error('Full output:', mermaidOutput);
+                throw new Error('CLI did not return valid Mermaid diagram. Output: ' + mermaidOutput.substring(0, 200));
+            }
 
             // Parse metadata from Mermaid comments
             const metadata = this.parseMermaidMetadata(mermaidOutput);
 
             console.log('Parsed metadata:', Object.keys(metadata).length, 'nodes');
+            console.log('Metadata:', metadata);
 
             // Send to webview
             this._panel.webview.postMessage({
@@ -100,8 +112,13 @@ export class GraphWebview {
                 metadata: metadata
             });
         } catch (error) {
-            console.error('Update graph error:', error);
-            vscode.window.showErrorMessage(`Failed to generate graph: ${error instanceof Error ? error.message : String(error)}`);
+            console.error('=== Update graph error ===');
+            console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+            console.error('Error message:', error instanceof Error ? error.message : String(error));
+            console.error('Full error:', error);
+
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Failed to generate graph: ${errorMsg}`);
         }
     }
 
@@ -111,6 +128,7 @@ export class GraphWebview {
             // This may cause some cross-file references to be missing, but prevents "text size exceeded" errors
             const args = ['-mermaid', filePath];
 
+            console.log(`=== CLI Execution ===`);
             console.log(`Running: ${this._cliPath} ${args.join(' ')}`);
             console.log(`Note: Analyzing single file to avoid Mermaid size limits`);
 
@@ -120,23 +138,45 @@ export class GraphWebview {
             let stderr = '';
 
             process.stdout.on('data', (data: Buffer) => {
-                stdout += data.toString();
+                const chunk = data.toString();
+                stdout += chunk;
+                console.log('CLI stdout chunk:', chunk.substring(0, 100));
             });
 
             process.stderr.on('data', (data: Buffer) => {
-                stderr += data.toString();
+                const chunk = data.toString();
+                stderr += chunk;
+                console.error('CLI stderr chunk:', chunk);
             });
 
             process.on('error', (error) => {
+                console.error('CLI spawn error:', error);
                 reject(new Error(`Failed to spawn CLI process: ${error.message}`));
             });
 
             process.on('close', (code) => {
+                console.log(`=== CLI Exit ===`);
+                console.log(`Exit code: ${code}`);
+                console.log(`Stdout length: ${stdout.length}`);
+                console.log(`Stderr length: ${stderr.length}`);
+
+                if (stderr) {
+                    console.error('CLI stderr:', stderr);
+                }
+
                 if (code !== null && code !== 0) {
-                    reject(new Error(`CLI exited with code ${code}: ${stderr}`));
+                    console.error(`CLI failed with exit code ${code}`);
+                    reject(new Error(`CLI exited with code ${code}. stderr: ${stderr || 'none'}. stdout: ${stdout.substring(0, 200)}`));
                     return;
                 }
 
+                if (!stdout || stdout.trim().length === 0) {
+                    console.error('CLI returned empty output');
+                    reject(new Error(`CLI returned no output. stderr: ${stderr || 'none'}`));
+                    return;
+                }
+
+                console.log('CLI succeeded, returning output');
                 resolve(stdout);
             });
         });
