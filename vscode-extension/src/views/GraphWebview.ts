@@ -398,30 +398,18 @@ export class GraphWebview {
 </head>
 <body>
     <div class="toolbar">
-        <input id="search" type="text" placeholder="Search components..." />
-        <span style="margin-left: 8px; font-size: 11px; font-weight: bold;">Layout:</span>
+        <span style="font-size: 11px; font-weight: bold;">Layout:</span>
         <select id="layout-direction" style="font-size: 11px; margin-left: 4px; padding: 2px;">
             <option value="LR" selected>Left→Right (LR)</option>
             <option value="TD">Top↓Down (TD)</option>
         </select>
-        <span style="margin-left: 12px; font-size: 11px; font-weight: bold;">Show:</span>
-        <label style="font-size: 11px; margin-left: 4px;">
-            <input type="checkbox" id="filter-state" checked /> State
+        <label style="font-size: 11px; margin-left: 12px;">
+            <input type="checkbox" id="show-edges" checked /> Show Edges
         </label>
-        <label style="font-size: 11px;">
-            <input type="checkbox" id="filter-passthrough" checked /> Passthrough
-        </label>
-        <label style="font-size: 11px;">
-            <input type="checkbox" id="filter-regular" checked /> Regular
-        </label>
-        <label style="font-size: 11px; margin-left: 8px;">
-            <input type="checkbox" id="show-edges" checked /> Edges
-        </label>
-        <button id="zoom-in" title="Zoom In">➕</button>
+        <button id="zoom-in" title="Zoom In" style="margin-left: 12px;">➕</button>
         <button id="zoom-out" title="Zoom Out">➖</button>
         <button id="fit-screen" title="Fit to Screen">⛶</button>
         <button id="reset-zoom" title="Reset View">↺</button>
-        <button id="reset-highlight" title="Clear Highlights">Clear</button>
     </div>
 
     <div class="graph-container">
@@ -734,18 +722,6 @@ export class GraphWebview {
         }
 
         // Toolbar interactions
-        document.getElementById('search').addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
-            document.querySelectorAll('.node').forEach(node => {
-                const name = node.getAttribute('data-name');
-                if (name && query && !name.toLowerCase().includes(query)) {
-                    node.style.opacity = '0.3';
-                } else {
-                    node.style.opacity = '1';
-                }
-            });
-        });
-
         document.getElementById('zoom-in').addEventListener('click', () => {
             zoomIn();
         });
@@ -762,70 +738,9 @@ export class GraphWebview {
             resetZoom();
         });
 
-        document.getElementById('reset-highlight').addEventListener('click', () => {
-            clearHighlights();
-        });
-
         document.getElementById('close-detail').addEventListener('click', () => {
             hideDetailPanel();
         });
-
-        // Filter controls
-        function applyFilters() {
-            const showState = document.getElementById('filter-state').checked;
-            const showPassthrough = document.getElementById('filter-passthrough').checked;
-            const showRegular = document.getElementById('filter-regular').checked;
-
-            document.querySelectorAll('.node').forEach(node => {
-                const nodeType = node.getAttribute('data-nodetype');
-                const type = node.getAttribute('data-type');
-
-                let visible = true;
-
-                if (nodeType === 'state' && !showState) {
-                    visible = false;
-                } else if (type === 'passthrough' && !showPassthrough) {
-                    visible = false;
-                } else if (type === 'regular' && !showRegular) {
-                    visible = false;
-                }
-
-                node.style.display = visible ? '' : 'none';
-            });
-
-            // Also hide/show connected edges
-            document.querySelectorAll('.edgePath').forEach(edge => {
-                const edgeId = edge.getAttribute('id');
-                if (!edgeId) return;
-
-                // Check if any connected node is hidden
-                const match = edgeId.match(/flowchart-([^-]+)-([^-]+)/);
-                if (match) {
-                    const [, fromId, toId] = match;
-                    const fromNode = document.getElementById(fromId);
-                    const toNode = document.getElementById(toId);
-
-                    const fromHidden = fromNode && fromNode.style.display === 'none';
-                    const toHidden = toNode && toNode.style.display === 'none';
-
-                    edge.style.display = (fromHidden || toHidden) ? 'none' : '';
-                }
-            });
-
-            // Hide edge labels for hidden edges
-            document.querySelectorAll('.edgeLabel').forEach(label => {
-                const parentEdge = label.closest('.edgePath');
-                if (parentEdge && parentEdge.style.display === 'none') {
-                    label.style.display = 'none';
-                } else {
-                    label.style.display = '';
-                }
-            });
-        }
-
-        document.getElementById('filter-state').addEventListener('change', applyFilters);
-        document.getElementById('filter-passthrough').addEventListener('change', applyFilters);
-        document.getElementById('filter-regular').addEventListener('change', applyFilters);
 
         // Edge visibility toggle
         document.getElementById('show-edges').addEventListener('change', (e) => {
