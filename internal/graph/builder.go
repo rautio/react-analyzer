@@ -388,15 +388,19 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 						if b.isParentVariable(varName, parentComp) {
 							propsPassedToChild = append(propsPassedToChild, propName)
 
+							// Infer prop data type from the value node
+							propDataType := b.inferPropDataType(valueNode)
+
 							// Create "passes" edge (include propName in ID to allow multiple props)
 							line, col := child.StartPoint()
 							edge := Edge{
-								ID:       GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
-								SourceID: parentComp.ID,
-								TargetID: childComp.ID,
-								Type:     EdgeTypePasses,
-								PropName: propName,
-								Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+								ID:           GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
+								SourceID:     parentComp.ID,
+								TargetID:     childComp.ID,
+								Type:         EdgeTypePasses,
+								PropName:     propName,
+								PropDataType: propDataType,
+								Location:     Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
 							}
 							b.graph.AddEdge(edge)
 						}
@@ -414,15 +418,19 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 
 								propsPassedToChild = append(propsPassedToChild, propName)
 
+								// Infer prop data type from the value node
+								propDataType := b.inferPropDataType(valueNode)
+
 								// Create "passes" edge with the property name
 								line, col := child.StartPoint()
 								edge := Edge{
-									ID:       GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
-									SourceID: parentComp.ID,
-									TargetID: childComp.ID,
-									Type:     EdgeTypePasses,
-									PropName: propName,
-									Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+									ID:           GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
+									SourceID:     parentComp.ID,
+									TargetID:     childComp.ID,
+									Type:         EdgeTypePasses,
+									PropName:     propName,
+									PropDataType: propDataType,
+									Location:     Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
 								}
 								b.graph.AddEdge(edge)
 							}
@@ -584,12 +592,13 @@ func (b *Builder) handleSpreadAttribute(spreadNode *parser.Node, parentComp *Com
 			// Create edge for this prop
 			line, col := spreadNode.StartPoint()
 			edge := Edge{
-				ID:       GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, childProp.Name),
-				SourceID: parentComp.ID,
-				TargetID: childComp.ID,
-				Type:     EdgeTypePasses,
-				PropName: childProp.Name,
-				Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+				ID:           GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, childProp.Name),
+				SourceID:     parentComp.ID,
+				TargetID:     childComp.ID,
+				Type:         EdgeTypePasses,
+				PropName:     childProp.Name,
+				PropDataType: childProp.Type, // Use the child prop's type since we're spreading
+				Location:     Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
 			}
 			b.graph.AddEdge(edge)
 		}
@@ -607,12 +616,13 @@ func (b *Builder) handleSpreadAttribute(spreadNode *parser.Node, parentComp *Com
 			// Create edge for this prop
 			line, col := spreadNode.StartPoint()
 			edge := Edge{
-				ID:       GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, childProp.Name),
-				SourceID: parentComp.ID,
-				TargetID: childComp.ID,
-				Type:     EdgeTypePasses,
-				PropName: childProp.Name,
-				Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+				ID:           GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, childProp.Name),
+				SourceID:     parentComp.ID,
+				TargetID:     childComp.ID,
+				Type:         EdgeTypePasses,
+				PropName:     childProp.Name,
+				PropDataType: childProp.Type, // Use the child prop's type since we're spreading
+				Location:     Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
 			}
 			b.graph.AddEdge(edge)
 		}
@@ -721,6 +731,49 @@ func (b *Builder) extractProps(funcNode *parser.Node) []PropDefinition {
 	}
 
 	return props
+}
+
+// inferPropDataType infers the data type of a prop from its JSX attribute value node
+func (b *Builder) inferPropDataType(valueNode *parser.Node) DataType {
+	if valueNode == nil {
+		return DataTypeUnknown
+	}
+
+	// Handle jsx_expression wrapper
+	if valueNode.Type() == "jsx_expression" {
+		// Look at the child expression
+		for _, child := range valueNode.Children() {
+			// Skip braces
+			if child.Type() == "{" || child.Type() == "}" {
+				continue
+			}
+			return b.inferPropDataType(child)
+		}
+		return DataTypeUnknown
+	}
+
+	// Check node type to infer data type
+	switch valueNode.Type() {
+	case "object":
+		return DataTypeObject
+	case "array":
+		return DataTypeArray
+	case "arrow_function", "function", "function_expression":
+		return DataTypeFunction
+	case "true", "false", "number", "string", "template_string":
+		return DataTypePrimitive
+	case "identifier":
+		// Can't determine type from identifier without type system
+		return DataTypeUnknown
+	case "member_expression":
+		// Can't determine type from member expression
+		return DataTypeUnknown
+	case "call_expression":
+		// Function call result - unknown type
+		return DataTypeUnknown
+	default:
+		return DataTypeUnknown
+	}
 }
 
 func (b *Builder) getJSXComponentName(node *parser.Node) string {

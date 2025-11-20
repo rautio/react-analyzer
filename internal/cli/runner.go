@@ -294,7 +294,7 @@ func Run(path string, opts *Options) int {
 
 	// Output results in Mermaid format if requested
 	if opts.Mermaid {
-		return outputMermaid(depGraph, opts)
+		return outputMermaidWithViolations(depGraph, allIssues, opts)
 	}
 
 	// Output results in JSON format if requested
@@ -623,4 +623,76 @@ func outputMermaid(depGraph *graph.Graph, opts *Options) int {
 	fmt.Print(mermaidDiagram)
 
 	return 0
+}
+
+func outputMermaidWithViolations(depGraph *graph.Graph, issues []rules.Issue, opts *Options) int {
+	if depGraph == nil {
+		fmt.Fprintf(os.Stderr, "Error: no graph available for Mermaid output\n")
+		return 2
+	}
+
+	// Generate base Mermaid diagram
+	mermaidDiagram := depGraph.ToMermaid()
+
+	// Group violations by component
+	violationsByComponent := make(map[string][]rules.Issue)
+	for _, issue := range issues {
+		// Find which component this issue belongs to
+		// Match by file path and line number
+		for _, comp := range depGraph.ComponentNodes {
+			if comp.Location.FilePath == issue.FilePath {
+				// Issue is in the same file as the component
+				// Add to this component's violations
+				componentKey := sanitizeComponentID(comp.ID)
+				violationsByComponent[componentKey] = append(violationsByComponent[componentKey], issue)
+			}
+		}
+	}
+
+	// Append violation metadata as comments
+	// For now, we'll just list all violations without trying to match them to specific components
+	var sb strings.Builder
+	sb.WriteString(mermaidDiagram)
+	sb.WriteString("\n    %% Violations\n")
+
+	// Use a map to de-duplicate violations (same message might appear multiple times)
+	seenViolations := make(map[string]bool)
+	for _, issue := range issues {
+		// Create a unique key for this violation
+		key := fmt.Sprintf("%s:%d:%s", issue.FilePath, issue.Line, issue.Rule)
+		if seenViolations[key] {
+			continue
+		}
+		seenViolations[key] = true
+
+		// Escape special characters in message
+		message := strings.ReplaceAll(issue.Message, "|", "\\|")
+		message = strings.ReplaceAll(message, "\n", " ")
+		sb.WriteString(fmt.Sprintf("    %%%% violation|rule:%s,severity:warning,line:%d,file:%s,message:%s\n",
+			issue.Rule,
+			issue.Line,
+			filepath.Base(issue.FilePath),
+			message,
+		))
+	}
+
+	// Print to stdout (and only Mermaid, nothing else)
+	fmt.Print(sb.String())
+
+	return 0
+}
+
+// sanitizeComponentID converts a component ID to match the sanitized version used in Mermaid output
+func sanitizeComponentID(id string) string {
+	sanitized := strings.ReplaceAll(id, ":", "_")
+	sanitized = strings.ReplaceAll(sanitized, "/", "_")
+	sanitized = strings.ReplaceAll(sanitized, ".", "_")
+	sanitized = strings.ReplaceAll(sanitized, "-", "_")
+	sanitized = strings.ReplaceAll(sanitized, " ", "_")
+
+	if len(sanitized) > 0 && (sanitized[0] < 'A' || sanitized[0] > 'z') {
+		sanitized = "node_" + sanitized
+	}
+
+	return sanitized
 }

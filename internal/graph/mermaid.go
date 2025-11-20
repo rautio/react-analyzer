@@ -78,6 +78,20 @@ func (g *Graph) ToMermaid() string {
 		))
 	}
 
+	// Write edge metadata for prop passing edges
+	for _, edge := range g.Edges {
+		if edge.Type == EdgeTypePasses && edge.PropName != "" {
+			fromID := sanitizeID(edge.SourceID)
+			toID := sanitizeID(edge.TargetID)
+			sb.WriteString(fmt.Sprintf("    %%%% edge:%s-%s|prop:%s|datatype:%s\n",
+				fromID,
+				toID,
+				edge.PropName,
+				edge.PropDataType,
+			))
+		}
+	}
+
 	sb.WriteString("\n")
 
 	// Write edges
