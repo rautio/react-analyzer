@@ -85,31 +85,21 @@ export class GraphWebview {
             console.log('=== Graph Generation Debug ===');
             console.log('File path:', filePath);
 
-            // Run CLI to get Mermaid output
-            const mermaidOutput = await this.getMermaidDiagram(filePath);
+            // Run CLI to get graph data
+            const analysisResult = await this.getGraphData(filePath);
 
-            console.log('Mermaid output length:', mermaidOutput.length);
-            console.log('Mermaid output preview:', mermaidOutput.substring(0, 200));
-            console.log('Mermaid output (full):', mermaidOutput);
+            console.log('Analysis result - issues:', analysisResult.issues?.length || 0);
+            console.log('Graph - component nodes:', Object.keys(analysisResult.graph?.componentNodes || {}).length);
+            console.log('Graph - state nodes:', Object.keys(analysisResult.graph?.stateNodes || {}).length);
+            console.log('Graph - edges:', analysisResult.graph?.edges?.length || 0);
 
-            // Check if output is actually Mermaid
-            if (!mermaidOutput.includes('flowchart')) {
-                console.error('ERROR: Output does not contain flowchart syntax');
-                console.error('Full output:', mermaidOutput);
-                throw new Error('CLI did not return valid Mermaid diagram. Output: ' + mermaidOutput.substring(0, 200));
-            }
-
-            // Parse metadata from Mermaid comments
-            const metadata = this.parseMermaidMetadata(mermaidOutput);
-
-            console.log('Parsed metadata:', Object.keys(metadata).length, 'nodes');
-            console.log('Metadata:', metadata);
-
-            // Send to webview
+            // Send to webview (webview will transform to Cytoscape format)
             this._panel.webview.postMessage({
                 type: 'renderGraph',
-                mermaid: mermaidOutput,
-                metadata: metadata
+                data: {
+                    graph: analysisResult.graph,
+                    issues: analysisResult.issues
+                }
             });
         } catch (error) {
             console.error('=== Update graph error ===');
@@ -118,7 +108,6 @@ export class GraphWebview {
             console.error('Full error:', error);
 
             const errorMsg = error instanceof Error ? error.message : String(error);
-            // Show error in both notification and output channel for better visibility
             vscode.window.showErrorMessage(`Failed to generate graph - check Output panel for details`);
             console.error('=== FULL ERROR FOR USER ===');
             console.error(errorMsg);
@@ -131,15 +120,13 @@ export class GraphWebview {
         }
     }
 
-    private async getMermaidDiagram(filePath: string): Promise<string> {
+    private async getGraphData(filePath: string): Promise<any> {
         return new Promise((resolve, reject) => {
-            // For large directories, just analyze the single file to avoid Mermaid size limits
-            // This may cause some cross-file references to be missing, but prevents "text size exceeded" errors
-            const args = ['-mermaid', filePath];
+            // Use --json --graph to get full graph data
+            const args = ['--json', '--graph', filePath];
 
             console.log(`=== CLI Execution ===`);
             console.log(`Running: ${this._cliPath} ${args.join(' ')}`);
-            console.log(`Note: Analyzing single file to avoid Mermaid size limits`);
 
             const process = child_process.spawn(this._cliPath, args);
 
@@ -173,9 +160,11 @@ export class GraphWebview {
                     console.error('CLI stderr:', stderr);
                 }
 
-                if (code !== null && code !== 0) {
+                // Exit code 1 means issues were found (expected for analysis with violations)
+                // Exit code 0 means no issues found
+                // Exit code >= 2 means actual error
+                if (code !== null && code >= 2) {
                     console.error(`CLI failed with exit code ${code}`);
-                    // Extract the most relevant error message from stderr
                     const errorDetails = stderr || stdout.substring(0, 500) || 'No error details available';
                     reject(new Error(`Parse Error:\n${errorDetails}`));
                     return;
@@ -188,67 +177,47 @@ export class GraphWebview {
                     return;
                 }
 
-                console.log('CLI succeeded, returning output');
-                resolve(stdout);
+                // Parse JSON output
+                try {
+                    const data = JSON.parse(stdout);
+                    console.log('CLI succeeded, parsed JSON data');
+                    resolve(data);
+                } catch (parseError) {
+                    console.error('Failed to parse JSON output:', parseError);
+                    console.error('Raw output:', stdout.substring(0, 500));
+                    reject(new Error(`Failed to parse JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`));
+                }
             });
         });
     }
 
-    private parseMermaidMetadata(mermaidDiagram: string): Record<string, any> {
-        const metadata: Record<string, any> = {};
-
-        // Parse metadata from comments like:
-        // %% meta:nodeId|file:path|line:10|type:origin|memoized:true|nodetype:component
-        // %% meta:nodeId|file:path|line:10|type:state|memoized:false|nodetype:state|statetype:useState|datatype:primitive
-        const metaRegex = /%%\s*meta:([^|\n]+)\|file:([^|\n]+)\|line:(\d+)\|([^\n]+)/g;
-
-        let match;
-        while ((match = metaRegex.exec(mermaidDiagram)) !== null) {
-            const [, nodeId, file, line, rest] = match;
-
-            // Parse remaining key:value pairs
-            const attrs: Record<string, string> = {};
-            const pairs = rest.split('|');
-            for (const pair of pairs) {
-                const [key, value] = pair.split(':');
-                if (key && value) {
-                    attrs[key.trim()] = value.trim();
-                }
-            }
-
-            metadata[nodeId.trim()] = {
-                file: file,
-                line: parseInt(line),
-                type: attrs.type || 'unknown',
-                memoized: attrs.memoized === 'true',
-                nodeType: attrs.nodetype || 'component',
-                stateType: attrs.statetype,
-                dataType: attrs.datatype
-            };
-        }
-
-        return metadata;
-    }
-
-    private async jumpToSource(filePath: string, line: number) {
+    private async jumpToSource(file: string, line: number) {
         try {
-            const uri = vscode.Uri.file(filePath);
-            const document = await vscode.workspace.openTextDocument(uri);
+            const document = await vscode.workspace.openTextDocument(file);
             const editor = await vscode.window.showTextDocument(document, vscode.ViewColumn.One);
-
-            // Jump to the line
             const position = new vscode.Position(Math.max(0, line - 1), 0);
             editor.selection = new vscode.Selection(position, position);
-            editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+            editor.revealRange(new vscode.Range(position, position));
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to open file: ${error}`);
         }
     }
 
+    public dispose() {
+        GraphWebview.currentPanel = undefined;
+
+        this._panel.dispose();
+
+        while (this._disposables.length) {
+            const disposable = this._disposables.pop();
+            if (disposable) {
+                disposable.dispose();
+            }
+        }
+    }
+
     private _getHtmlContent(): string {
         const webview = this._panel.webview;
-
-        // Use a nonce to only allow specific scripts to run
         const nonce = getNonce();
 
         return `<!DOCTYPE html>
@@ -256,9 +225,11 @@ export class GraphWebview {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net; style-src ${webview.cspSource} 'unsafe-inline' https://cdn.jsdelivr.net; img-src ${webview.cspSource} https:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} https:;">
     <title>React Component Graph</title>
-    <script nonce="${nonce}" src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script nonce="${nonce}" src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+    <script nonce="${nonce}" src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+    <script nonce="${nonce}" src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
     <style>
         body {
             background-color: var(--vscode-editor-background);
@@ -278,16 +249,6 @@ export class GraphWebview {
             align-items: center;
         }
 
-        .toolbar input {
-            background: var(--vscode-input-background);
-            color: var(--vscode-input-foreground);
-            border: 1px solid var(--vscode-input-border);
-            padding: 4px 8px;
-            border-radius: 2px;
-            flex: 1;
-            max-width: 300px;
-        }
-
         .toolbar button {
             background: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
@@ -295,69 +256,24 @@ export class GraphWebview {
             padding: 6px 12px;
             border-radius: 2px;
             cursor: pointer;
+            font-size: 11px;
         }
 
         .toolbar button:hover {
             background: var(--vscode-button-hoverBackground);
         }
 
-        .graph-container {
+        #cy {
             width: 100%;
             height: calc(100vh - 48px);
-            overflow: hidden;
-            position: relative;
             background: var(--vscode-editor-background);
-        }
-
-        #mermaid-graph {
-            transform-origin: 0 0;
-            transition: transform 0.1s ease-out;
-            cursor: grab;
-        }
-
-        #mermaid-graph.panning {
-            cursor: grabbing;
-        }
-
-        #mermaid-graph svg {
-            display: block;
-        }
-
-        /* Custom node styling */
-        .mermaid .node.state-origin rect {
-            fill: #10b981 !important;
-            stroke: #047857 !important;
-            stroke-width: 2px;
-        }
-
-        .mermaid .node.passthrough rect {
-            fill: #fbbf24 !important;
-            stroke: #f59e0b !important;
-        }
-
-        .mermaid .node.consumer rect {
-            fill: #3b82f6 !important;
-            stroke: #2563eb !important;
-        }
-
-        .mermaid .node.memoized rect {
-            stroke: #a855f7 !important;
-            stroke-width: 3px !important;
-            stroke-dasharray: 5, 5;
-        }
-
-        /* Hover effects */
-        .mermaid .node:hover rect {
-            filter: brightness(1.2) drop-shadow(0 0 8px currentColor);
-            cursor: pointer;
-            transition: all 0.2s ease;
         }
 
         .detail-panel {
             position: fixed;
             right: 0;
             top: 48px;
-            width: 300px;
+            width: 350px;
             height: calc(100vh - 48px);
             background: var(--vscode-sideBar-background);
             border-left: 1px solid var(--vscode-panel-border);
@@ -365,6 +281,7 @@ export class GraphWebview {
             overflow-y: auto;
             transform: translateX(100%);
             transition: transform 0.3s ease;
+            box-shadow: -2px 0 8px rgba(0,0,0,0.1);
         }
 
         .detail-panel.visible {
@@ -374,6 +291,8 @@ export class GraphWebview {
         .detail-panel h3 {
             margin-top: 0;
             color: var(--vscode-editor-foreground);
+            font-size: 16px;
+            font-weight: bold;
         }
 
         .detail-panel .close-btn {
@@ -392,6 +311,50 @@ export class GraphWebview {
             background: var(--vscode-list-hoverBackground);
         }
 
+        .detail-info {
+            font-size: 12px;
+            margin-bottom: 16px;
+        }
+
+        .detail-info p {
+            margin: 4px 0;
+        }
+
+        .detail-info strong {
+            color: var(--vscode-symbolIcon-keywordForeground);
+        }
+
+        .violation-list {
+            margin-top: 16px;
+        }
+
+        .violation-item {
+            background: var(--vscode-inputValidation-errorBackground);
+            border-left: 3px solid var(--vscode-inputValidation-errorBorder);
+            padding: 8px;
+            margin-bottom: 8px;
+            border-radius: 2px;
+        }
+
+        .violation-item .rule {
+            font-weight: bold;
+            font-size: 11px;
+            color: var(--vscode-errorForeground);
+            margin-bottom: 4px;
+        }
+
+        .violation-item .message {
+            font-size: 11px;
+            line-height: 1.4;
+            color: var(--vscode-editor-foreground);
+        }
+
+        .violation-item .location {
+            font-size: 10px;
+            color: var(--vscode-descriptionForeground);
+            margin-top: 4px;
+        }
+
         .loading {
             display: flex;
             justify-content: center;
@@ -405,24 +368,15 @@ export class GraphWebview {
 <body>
     <div class="toolbar">
         <span style="font-size: 11px; font-weight: bold;">Layout:</span>
-        <select id="layout-direction" style="font-size: 11px; margin-left: 4px; padding: 2px;">
-            <option value="LR" selected>Left→Right (LR)</option>
-            <option value="TD">Top↓Down (TD)</option>
+        <select id="layout-direction" style="font-size: 11px; margin-left: 4px; padding: 2px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border);">
+            <option value="LR" selected>Left→Right</option>
+            <option value="TB">Top→Down</option>
         </select>
-        <label style="font-size: 11px; margin-left: 12px;">
-            <input type="checkbox" id="show-edges" checked /> Show Edges
-        </label>
-        <button id="zoom-in" title="Zoom In" style="margin-left: 12px;">➕</button>
-        <button id="zoom-out" title="Zoom Out">➖</button>
-        <button id="fit-screen" title="Fit to Screen">⛶</button>
-        <button id="reset-zoom" title="Reset View">↺</button>
+        <button id="fit-screen" title="Fit to Screen">Fit</button>
+        <button id="reset-zoom" title="Reset View">Reset</button>
     </div>
 
-    <div class="graph-container">
-        <div id="mermaid-graph" class="mermaid">
-            <div class="loading">Loading graph...</div>
-        </div>
-    </div>
+    <div id="cy"></div>
 
     <div id="detail-panel" class="detail-panel">
         <button class="close-btn" id="close-detail">&times;</button>
@@ -432,316 +386,399 @@ export class GraphWebview {
 
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
-        let metadata = {};
-        let originalMermaidSyntax = '';  // Store original syntax for layout switching
+        let cy = null;
+        let graphData = null;
 
-        // Initialize Mermaid
-        mermaid.initialize({
-            startOnLoad: false,
-            theme: 'base',
-            themeVariables: {
-                primaryColor: '#1e293b',
-                primaryTextColor: '#e2e8f0',
-                primaryBorderColor: '#475569',
-                lineColor: '#64748b'
-            }
-        });
-
-        // Handle messages from extension
-        window.addEventListener('message', async event => {
-            const message = event.data;
-            console.log('Received message:', message.type);
-
-            switch (message.type) {
-                case 'renderGraph':
-                    console.log('Rendering graph, mermaid length:', message.mermaid?.length);
-                    console.log('Metadata keys:', Object.keys(message.metadata || {}).length);
-                    await renderGraph(message.mermaid, message.metadata);
-                    break;
-                case 'showError':
-                    console.error('Graph generation error:', message.error);
-                    showError(message.error);
-                    break;
-            }
-        });
-
-        function showError(errorMessage) {
-            const container = document.getElementById('mermaid-graph');
-            container.innerHTML = '<div style="padding: 20px; color: #ef4444; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 4px; white-space: pre-wrap; font-family: monospace; font-size: 12px;">' +
-                '<strong style="display: block; margin-bottom: 10px; font-size: 14px;">Error generating graph:</strong>' +
-                errorMessage +
-                '</div>';
-        }
-
-        async function renderGraph(mermaidSyntax, meta) {
-            metadata = meta;
-            originalMermaidSyntax = mermaidSyntax;  // Store for layout switching
-            const container = document.getElementById('mermaid-graph');
-
-            try {
-                // Render Mermaid using the v10 API
-                const { svg } = await mermaid.render('mermaid-diagram', mermaidSyntax);
-                container.innerHTML = svg;
-
-                // Enhance with custom interactions
-                enhanceGraph();
-            } catch (error) {
-                console.error('Mermaid rendering error:', error);
-                container.innerHTML = '<div class="loading">Failed to render graph: ' + error.message + '</div>';
-                vscode.postMessage({ type: 'error', message: 'Failed to render graph: ' + error.message });
-            }
-        }
-
-        async function changeLayout(direction) {
-            if (!originalMermaidSyntax) return;
-
-            // Replace the flowchart direction in the syntax
-            let newSyntax = originalMermaidSyntax.replace(/^flowchart (TD|LR)/m, 'flowchart ' + direction);
-
-            // Re-render with new layout
-            await renderGraph(newSyntax, metadata);
-        }
-
-        function enhanceGraph() {
-            const container = document.getElementById('mermaid-graph');
-            const svg = container.querySelector('svg');
-            if (!svg) {
-                console.error('SVG not found in container');
+        // Initialize cytoscape
+        function initCytoscape() {
+            if (!window.cytoscape) {
+                console.error('Cytoscape library not loaded');
                 return;
             }
 
-            // Add click handlers to all nodes
-            svg.querySelectorAll('.node').forEach(node => {
-                const nodeId = node.getAttribute('id');
-                const meta = metadata[nodeId];
+            // Register dagre extension
+            if (window.cytoscapeDagre) {
+                cytoscape.use(cytoscapeDagre);
+            }
 
-                if (!meta) return;
+            cy = cytoscape({
+                container: document.getElementById('cy'),
+                style: [
+                    {
+                        selector: 'node',
+                        style: {
+                            'label': 'data(label)',
+                            'text-valign': 'center',
+                            'text-halign': 'center',
+                            'font-size': '12px',
+                            'color': '#ffffff',
+                            'background-color': '#666',
+                            'border-width': 2,
+                            'border-color': '#444',
+                            'width': 'label',
+                            'height': 'label',
+                            'padding': '12px',
+                            'shape': 'roundrectangle'
+                        }
+                    },
+                    {
+                        selector: 'node.origin',
+                        style: {
+                            'background-color': '#059669',
+                            'border-color': '#047857',
+                            'color': '#ffffff'
+                        }
+                    },
+                    {
+                        selector: 'node.passthrough',
+                        style: {
+                            'background-color': '#d97706',
+                            'border-color': '#b45309',
+                            'color': '#ffffff'
+                        }
+                    },
+                    {
+                        selector: 'node.consumer',
+                        style: {
+                            'background-color': '#2563eb',
+                            'border-color': '#1d4ed8',
+                            'color': '#ffffff'
+                        }
+                    },
+                    {
+                        selector: 'node.regular',
+                        style: {
+                            'background-color': '#6b7280',
+                            'border-color': '#4b5563',
+                            'color': '#ffffff'
+                        }
+                    },
+                    {
+                        selector: 'node.state',
+                        style: {
+                            'background-color': '#9333ea',
+                            'border-color': '#7e22ce',
+                            'shape': 'ellipse',
+                            'color': '#ffffff'
+                        }
+                    },
+                    {
+                        selector: 'node.memoized',
+                        style: {
+                            'border-width': 3,
+                            'border-style': 'dashed'
+                        }
+                    },
+                    {
+                        selector: 'node.has-violations',
+                        style: {
+                            'border-color': '#fbbf24',
+                            'border-width': 3
+                        }
+                    },
+                    {
+                        selector: 'node:selected',
+                        style: {
+                            'overlay-color': '#60a5fa',
+                            'overlay-opacity': 0.3,
+                            'overlay-padding': 8
+                        }
+                    },
+                    {
+                        selector: 'edge',
+                        style: {
+                            'width': 3,
+                            'line-color': '#64748b',
+                            'target-arrow-color': '#64748b',
+                            'target-arrow-shape': 'triangle',
+                            'curve-style': 'bezier',
+                            'label': 'data(label)',
+                            'font-size': '11px',
+                            'color': '#f1f5f9',
+                            'text-background-color': '#334155',
+                            'text-background-opacity': 0.95,
+                            'text-background-padding': '4px'
+                        }
+                    },
+                    {
+                        selector: 'edge.unstable-prop',
+                        style: {
+                            'line-color': '#ef4444',
+                            'target-arrow-color': '#ef4444',
+                            'line-style': 'dashed',
+                            'width': 2.5
+                        }
+                    }
+                ],
+                layout: {
+                    name: 'preset'
+                },
+                minZoom: 0.2,
+                maxZoom: 3,
+                wheelSensitivity: 0.2
+            });
 
-                // Add CSS class for styling and filtering
-                node.classList.add(meta.type);
-                if (meta.memoized) node.classList.add('memoized');
+            // Click handler for nodes
+            cy.on('tap', 'node', function(evt) {
+                const node = evt.target;
+                showNodeDetails(node);
+            });
 
-                // Add node type class for filtering
-                if (meta.nodeType === 'state') {
-                    node.classList.add('filter-state-node');
-                } else if (meta.type === 'passthrough') {
-                    node.classList.add('filter-passthrough-node');
-                } else if (meta.type === 'regular') {
-                    node.classList.add('filter-regular-node');
+            // Close detail panel when clicking background
+            cy.on('tap', function(evt) {
+                if (evt.target === cy) {
+                    hideDetailPanel();
+                }
+            });
+        }
+
+        function renderGraph(data) {
+            if (!cy) {
+                initCytoscape();
+            }
+
+            graphData = data;
+
+            // Transform regular graph JSON to Cytoscape format
+            const cytoscapeData = transformGraphToCytoscape(data.graph, data.issues);
+
+            // Group violations by node
+            const violationsByNode = {};
+            if (data.issues) {
+                data.issues.forEach(issue => {
+                    // Match violations to nodes by file path
+                    Object.entries(data.graph.componentNodes || {}).forEach(([id, node]) => {
+                        if (node.location.filePath === issue.filePath) {
+                            if (!violationsByNode[id]) {
+                                violationsByNode[id] = [];
+                            }
+                            violationsByNode[id].push(issue);
+                        }
+                    });
+                    Object.entries(data.graph.stateNodes || {}).forEach(([id, node]) => {
+                        if (node.location.filePath === issue.filePath) {
+                            if (!violationsByNode[id]) {
+                                violationsByNode[id] = [];
+                            }
+                            violationsByNode[id].push(issue);
+                        }
+                    });
+                });
+            }
+
+            // Add violation classes and badges to nodes
+            const elements = {
+                nodes: cytoscapeData.nodes.map(node => {
+                    const classes = node.classes || '';
+                    const nodeViolations = violationsByNode[node.data.id] || [];
+
+                    let label = node.data.label;
+                    if (nodeViolations.length > 0) {
+                        label = '⚠ ' + label + ' (' + nodeViolations.length + ')';
+                    }
+
+                    return {
+                        data: {
+                            ...node.data,
+                            label: label,
+                            violations: nodeViolations
+                        },
+                        classes: nodeViolations.length > 0
+                            ? classes + ' has-violations'
+                            : classes
+                    };
+                }),
+                edges: cytoscapeData.edges
+            };
+
+            cy.elements().remove();
+            cy.add(elements);
+
+            runLayout();
+        }
+
+        function transformGraphToCytoscape(graph, issues) {
+            const nodes = [];
+            const edges = [];
+
+            // Helper to determine node type (origin/passthrough/consumer/regular)
+            function getNodeType(node, graph) {
+                const hasState = node.stateNodes && node.stateNodes.length > 0;
+
+                // Check edges to determine passthrough vs consumer
+                const nodeEdges = graph.edges.filter(e => e.sourceId === node.id || e.targetId === node.id);
+                const passesProps = nodeEdges.some(e => e.sourceId === node.id && e.type === 'passes');
+                const consumesState = nodeEdges.some(e => e.targetId === node.id && e.type === 'consumes');
+
+                if (hasState) return 'origin';
+                if (passesProps && !consumesState) return 'passthrough';
+                if (consumesState) return 'consumer';
+                return 'regular';
+            }
+
+            // Transform component nodes
+            Object.entries(graph.componentNodes || {}).forEach(([id, node]) => {
+                const nodeType = getNodeType(node, graph);
+                const classes = [nodeType];
+                if (node.isMemoized) {
+                    classes.push('memoized');
                 }
 
-                // Store metadata for search
-                node.setAttribute('data-name', nodeId);
-                node.setAttribute('data-nodetype', meta.nodeType || 'component');
-                node.setAttribute('data-type', meta.type);
+                nodes.push({
+                    data: {
+                        id: id,
+                        label: node.name,
+                        type: nodeType,
+                        nodeType: 'component',
+                        file: node.location.filePath,
+                        line: node.location.line,
+                        memoized: node.isMemoized
+                    },
+                    classes: classes.join(' ')
+                });
             });
 
-            // Enable zoom/pan
-            setupZoomPan();
-        }
-
-        // Zoom and pan functionality
-        let currentZoom = 1;
-        let panX = 0;
-        let panY = 0;
-        let isPanning = false;
-        let startX = 0;
-        let startY = 0;
-
-        function setupZoomPan() {
-            const container = document.getElementById('mermaid-graph');
-            const graphContainer = document.querySelector('.graph-container');
-
-            // Mouse wheel zoom
-            graphContainer.addEventListener('wheel', (e) => {
-                e.preventDefault();
-
-                const delta = e.deltaY > 0 ? 0.9 : 1.1;
-                const newZoom = Math.min(Math.max(0.1, currentZoom * delta), 5);
-
-                // Zoom towards mouse position
-                const rect = graphContainer.getBoundingClientRect();
-                const mouseX = e.clientX - rect.left;
-                const mouseY = e.clientY - rect.top;
-
-                // Adjust pan to zoom towards mouse
-                panX = mouseX - (mouseX - panX) * (newZoom / currentZoom);
-                panY = mouseY - (mouseY - panY) * (newZoom / currentZoom);
-
-                currentZoom = newZoom;
-                updateTransform();
+            // Transform state nodes
+            Object.entries(graph.stateNodes || {}).forEach(([id, node]) => {
+                nodes.push({
+                    data: {
+                        id: id,
+                        label: node.type + ': ' + node.name,
+                        type: 'state',
+                        nodeType: 'state',
+                        file: node.location.filePath,
+                        line: node.location.line,
+                        stateType: node.type,
+                        dataType: node.dataType
+                    },
+                    classes: 'state'
+                });
             });
 
-            // Pan with mouse drag
-            graphContainer.addEventListener('mousedown', (e) => {
-                // Only pan if clicking on background or SVG, not on nodes
-                const target = e.target;
-                if (target.classList.contains('graph-container') ||
-                    target.tagName === 'svg' ||
-                    target.tagName === 'g' ||
-                    target.classList.contains('mermaid')) {
-                    isPanning = true;
-                    startX = e.clientX - panX;
-                    startY = e.clientY - panY;
-                    container.classList.add('panning');
-                    e.preventDefault();
+            // Transform edges
+            (graph.edges || []).forEach(edge => {
+                const classes = [];
+
+                // Mark unstable props
+                if (edge.propDataType === 'object' ||
+                    edge.propDataType === 'array' ||
+                    edge.propDataType === 'function') {
+                    classes.push('unstable-prop');
                 }
+
+                edges.push({
+                    data: {
+                        source: edge.sourceId,
+                        target: edge.targetId,
+                        label: edge.propName || '',
+                        dataType: edge.propDataType || '',
+                        edgeType: edge.type
+                    },
+                    classes: classes.join(' ')
+                });
             });
 
-            graphContainer.addEventListener('mousemove', (e) => {
-                if (isPanning) {
-                    panX = e.clientX - startX;
-                    panY = e.clientY - startY;
-                    updateTransform();
-                }
-            });
-
-            graphContainer.addEventListener('mouseup', () => {
-                isPanning = false;
-                container.classList.remove('panning');
-            });
-
-            graphContainer.addEventListener('mouseleave', () => {
-                isPanning = false;
-                container.classList.remove('panning');
-            });
+            return { nodes, edges };
         }
 
-        function updateTransform() {
-            const container = document.getElementById('mermaid-graph');
-            container.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + currentZoom + ')';
+        function runLayout() {
+            const layoutDir = document.getElementById('layout-direction').value;
+
+            cy.layout({
+                name: 'dagre',
+                rankDir: layoutDir,
+                nodeSep: 80,
+                rankSep: 100,
+                padding: 50,
+                animate: true,
+                animationDuration: 500,
+                fit: true
+            }).run();
         }
 
-        function zoomIn() {
-            currentZoom = Math.min(currentZoom * 1.2, 5);
-            updateTransform();
-        }
-
-        function zoomOut() {
-            currentZoom = Math.max(currentZoom / 1.2, 0.1);
-            updateTransform();
-        }
-
-        function resetZoom() {
-            currentZoom = 1;
-            panX = 0;
-            panY = 0;
-            updateTransform();
-        }
-
-        function fitToScreen() {
-            const container = document.getElementById('mermaid-graph');
-            const graphContainer = document.querySelector('.graph-container');
-            const svg = container.querySelector('svg');
-
-            if (!svg) return;
-
-            const svgRect = svg.getBBox();
-            const containerRect = graphContainer.getBoundingClientRect();
-
-            // Calculate zoom to fit
-            const scaleX = (containerRect.width - 40) / svgRect.width;
-            const scaleY = (containerRect.height - 40) / svgRect.height;
-            currentZoom = Math.min(scaleX, scaleY, 1); // Don't zoom in beyond 100%
-
-            // Center the graph
-            panX = (containerRect.width - svgRect.width * currentZoom) / 2;
-            panY = (containerRect.height - svgRect.height * currentZoom) / 2;
-
-            updateTransform();
-        }
-
-        function showDetailPanel(nodeId, meta) {
+        function showNodeDetails(node) {
+            const data = node.data();
             const panel = document.getElementById('detail-panel');
             const title = document.getElementById('detail-title');
             const content = document.getElementById('detail-content');
 
-            title.textContent = nodeId.replace(/_/g, ' ').replace(/component /g, '').replace(/state /g, '');
+            title.textContent = data.label.replace(/^⚠\\\\s*/, '').replace(/\\\\s*\\\\(\\\\d+\\\\)$/, '');
 
-            let detailsHtml = \`
-                <p><strong>File:</strong> \${meta.file.split('/').pop()}</p>
-                <p><strong>Line:</strong> \${meta.line}</p>
-            \`;
+            let html = '<div class="detail-info">';
+            html += '<p><strong>Type:</strong> ' + (data.nodeType || 'component') + '</p>';
+            html += '<p><strong>File:</strong> ' + (data.file ? data.file.split('/').pop() : 'N/A') + '</p>';
+            html += '<p><strong>Line:</strong> ' + (data.line || 'N/A') + '</p>';
 
-            if (meta.nodeType === 'state') {
-                // State node details
-                detailsHtml += \`
-                    <p><strong>Node Type:</strong> State</p>
-                    <p><strong>State Type:</strong> \${meta.stateType}</p>
-                    <p><strong>Data Type:</strong> \${meta.dataType}</p>
-                \`;
-            } else {
-                // Component node details
-                detailsHtml += \`
-                    <p><strong>Node Type:</strong> Component</p>
-                    <p><strong>Role:</strong> \${meta.type}</p>
-                    <p><strong>Memoized:</strong> \${meta.memoized ? '⚡ Yes' : 'No'}</p>
-                \`;
+            if (data.memoized) {
+                html += '<p><strong>Memoized:</strong> ⚡ Yes</p>';
             }
 
-            detailsHtml += \`
-                <p><strong>Full Path:</strong><br/><small>\${meta.file}</small></p>
-            \`;
+            if (data.violations && data.violations.length > 0) {
+                html += '</div>';
+                html += '<div class="violation-list">';
+                html += '<h4 style="margin: 0 0 8px 0; color: var(--vscode-errorForeground);">⚠ Issues (' + data.violations.length + ')</h4>';
 
-            content.innerHTML = detailsHtml;
+                data.violations.forEach(v => {
+                    html += '<div class="violation-item">';
+                    html += '<div class="rule">' + v.rule + '</div>';
+                    html += '<div class="message">' + v.message + '</div>';
+                    html += '<div class="location">Line ' + v.line + '</div>';
+                    html += '</div>';
+                });
+
+                html += '</div>';
+            } else {
+                html += '</div>';
+            }
+
+            content.innerHTML = html;
             panel.classList.add('visible');
+
+            // Add click-to-jump functionality
+            if (data.file && data.line) {
+                content.style.cursor = 'pointer';
+                content.onclick = () => {
+                    vscode.postMessage({
+                        type: 'jumpToSource',
+                        file: data.file,
+                        line: data.line
+                    });
+                };
+            }
         }
 
         function hideDetailPanel() {
             document.getElementById('detail-panel').classList.remove('visible');
         }
 
-        // Toolbar interactions
-        document.getElementById('zoom-in').addEventListener('click', () => {
-            zoomIn();
+        // Event handlers
+        document.getElementById('layout-direction').addEventListener('change', runLayout);
+        document.getElementById('fit-screen').addEventListener('click', () => cy.fit(50));
+        document.getElementById('reset-zoom').addEventListener('click', () => cy.reset());
+        document.getElementById('close-detail').addEventListener('click', hideDetailPanel);
+
+        // Handle messages from extension
+        window.addEventListener('message', event => {
+            const message = event.data;
+
+            switch (message.type) {
+                case 'renderGraph':
+                    console.log('Rendering graph with data:', message.data);
+                    renderGraph(message.data);
+                    break;
+                case 'showError':
+                    document.getElementById('cy').innerHTML =
+                        '<div class="loading" style="color: var(--vscode-errorForeground);">Error: ' +
+                        message.error + '</div>';
+                    break;
+            }
         });
 
-        document.getElementById('zoom-out').addEventListener('click', () => {
-            zoomOut();
-        });
-
-        document.getElementById('fit-screen').addEventListener('click', () => {
-            fitToScreen();
-        });
-
-        document.getElementById('reset-zoom').addEventListener('click', () => {
-            resetZoom();
-        });
-
-        document.getElementById('close-detail').addEventListener('click', () => {
-            hideDetailPanel();
-        });
-
-        // Edge visibility toggle
-        document.getElementById('show-edges').addEventListener('change', (e) => {
-            const showEdges = e.target.checked;
-            document.querySelectorAll('.edgePath, .edgeLabel').forEach(el => {
-                el.style.display = showEdges ? '' : 'none';
-            });
-        });
-
-        // Layout direction toggle
-        document.getElementById('layout-direction').addEventListener('change', async (e) => {
-            const direction = e.target.value;
-            console.log('Changing layout to:', direction);
-            await changeLayout(direction);
-        });
+        // Initialize
+        initCytoscape();
     </script>
 </body>
 </html>`;
-    }
-
-    public dispose() {
-        GraphWebview.currentPanel = undefined;
-
-        this._panel.dispose();
-
-        while (this._disposables.length) {
-            const disposable = this._disposables.pop();
-            if (disposable) {
-                disposable.dispose();
-            }
-        }
     }
 }
 

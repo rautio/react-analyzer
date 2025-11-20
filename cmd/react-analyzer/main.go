@@ -33,8 +33,6 @@ func main() {
 
 	includeGraph := flag.Bool("graph", false, "")
 
-	mermaidOutput := flag.Bool("mermaid", false, "")
-
 	// Custom usage (will show our help text)
 	flag.Usage = func() {
 		cli.PrintHelp(os.Stdout)
@@ -71,7 +69,6 @@ func main() {
 		Workers:      *workers,
 		JSON:         *jsonOutput,
 		IncludeGraph: *includeGraph,
-		Mermaid:      *mermaidOutput,
 	}
 
 	// Run analysis and exit with appropriate code
