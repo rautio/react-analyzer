@@ -15,6 +15,11 @@ Create a `.rarc` (shorthand) or `.reactanalyzerrc.json` file in your project roo
       "@components/*": ["src/components/*"]
     }
   },
+  "ignore": [
+    "**/*.test.tsx",
+    "**/__tests__/**",
+    "**/*.stories.tsx"
+  ],
   "rules": {
     "deep-prop-drilling": {
       "enabled": true,
@@ -26,8 +31,9 @@ Create a `.rarc` (shorthand) or `.reactanalyzerrc.json` file in your project roo
 }
 ```
 
-The configuration file supports two main sections:
+The configuration file supports three main sections:
 - **`compilerOptions`** - TypeScript path aliases for module resolution (optional)
+- **`ignore`** - File/directory patterns to exclude from analysis (optional, **coming in Phase 4**)
 - **`rules`** - Rule-specific configuration (optional)
 
 ## File Discovery
@@ -76,6 +82,49 @@ The `compilerOptions` section allows you to configure TypeScript-style path alia
 - `@components/*` → `src/components/*` - Maps `@components/Button` to `src/components/Button`
 
 **Note:** If you already have a `tsconfig.json`, the analyzer will automatically read path aliases from it. You only need to add `compilerOptions` to `.reactanalyzerrc.json` if you want to override or add additional aliases.
+
+## Ignore Patterns (Coming in Phase 4)
+
+The `ignore` section allows you to exclude specific files and directories from analysis. This is useful for skipping test files, story files, or legacy code.
+
+```json
+{
+  "ignore": [
+    "**/*.test.tsx",
+    "**/*.test.ts",
+    "**/__tests__/**",
+    "**/*.spec.tsx",
+    "**/*.stories.tsx",
+    "**/storybook/**",
+    "src/legacy/**",
+    "!src/legacy/important.tsx"
+  ]
+}
+```
+
+**Pattern Syntax:**
+- Supports glob patterns (`**/*.test.tsx` matches all test files recursively)
+- Supports directory exclusions (`**/stories/**` excludes all story directories)
+- Supports negation (`!src/legacy/important.tsx` includes a specific file)
+- Similar to ESLint's `ignorePatterns` and Jest's `testPathIgnorePatterns`
+
+**Default Ignores:**
+The analyzer always ignores these directories (hardcoded):
+- `node_modules/`
+- `dist/`
+- `build/`
+- `.git/`
+
+**CLI Override:**
+```bash
+# Use custom ignore file
+react-analyzer src/ --ignore-path .analyzerignore
+
+# Add patterns via CLI
+react-analyzer src/ --ignore "**/*.test.tsx"
+```
+
+**Note:** This feature is planned for Phase 4 (see [ROADMAP.md](ROADMAP.md#4d-ignore-pattern-support-1-week)).
 
 ## Rule Configuration
 

@@ -506,6 +506,58 @@ See [phase2_vscode_extension_architecture.md](design/phase2_vscode_extension_arc
 - [ ] Pre-commit hook templates
 - [ ] Watch mode for development
 - [ ] JSON output for CI/CD pipelines
+- [ ] **Ignore patterns** - Exclude specific files/directories from analysis (see 4D below)
+
+#### 4D: Ignore Pattern Support (1 week)
+
+**Goal:** Allow users to exclude specific files and directories from analysis
+
+**Deliverables:**
+- [ ] Add `ignore` field to config file (.rarc/.reactanalyzerrc.json)
+- [ ] Support glob patterns (e.g., `**/*.test.tsx`, `**/stories/**`)
+- [ ] Support negation patterns (e.g., `!src/important.test.tsx`)
+- [ ] Default ignore patterns (node_modules, dist, build, .git - already hardcoded)
+- [ ] Respect .gitignore patterns (optional)
+- [ ] CLI flag `--ignore-path` to specify custom ignore file
+
+**Configuration Example:**
+```json
+{
+  "ignore": [
+    "**/*.test.tsx",
+    "**/*.test.ts",
+    "**/__tests__/**",
+    "**/*.stories.tsx",
+    "**/storybook/**",
+    "src/legacy/**",
+    "!src/legacy/important.tsx"
+  ]
+}
+```
+
+**CLI Examples:**
+```bash
+# Use config file ignore patterns
+react-analyzer src/
+
+# Override with custom ignore file
+react-analyzer src/ --ignore-path .analyzerignore
+
+# Add ignore patterns via CLI
+react-analyzer src/ --ignore "**/*.test.tsx" --ignore "**/stories/**"
+```
+
+**Implementation Notes:**
+- Similar to ESLint's `ignorePatterns` and Jest's `testPathIgnorePatterns`
+- Use existing glob matcher library (e.g., `doublestar` in Go)
+- Apply ignore patterns BEFORE file parsing (performance optimization)
+- Ignored files should not be loaded into AST or graph
+
+**Success Criteria:**
+- [ ] Ignore patterns reduce analysis time on test-heavy codebases
+- [ ] Pattern syntax matches ESLint/Jest conventions
+- [ ] Clear error messages for invalid patterns
+- [ ] Documentation with common use cases
 
 ---
 
