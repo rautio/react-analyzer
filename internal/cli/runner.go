@@ -26,6 +26,7 @@ type Options struct {
 	Workers      int  // Number of parallel workers (0 = auto-detect CPUs, 1 = sequential)
 	JSON         bool // Output results as JSON
 	IncludeGraph bool // Include dependency graph in JSON output (requires JSON mode)
+	Mermaid      bool // Output Mermaid flowchart diagram
 }
 
 // AnalysisStats holds metrics about the analysis run
@@ -289,6 +290,11 @@ func Run(path string, opts *Options) int {
 	// Collect per-rule stats (for verbose mode)
 	if opts.Verbose {
 		collectRuleStats(allIssues, stats)
+	}
+
+	// Output results in Mermaid format if requested
+	if opts.Mermaid {
+		return outputMermaid(depGraph, opts)
 	}
 
 	// Output results in JSON format if requested
@@ -600,5 +606,21 @@ func outputJSON(issues []rules.Issue, stats *AnalysisStats, depGraph *graph.Grap
 	if len(issues) > 0 {
 		return 1
 	}
+	return 0
+}
+
+// outputMermaid outputs the dependency graph in Mermaid flowchart format
+func outputMermaid(depGraph *graph.Graph, opts *Options) int {
+	if depGraph == nil {
+		fmt.Fprintf(os.Stderr, "Error: no graph available for Mermaid output\n")
+		return 2
+	}
+
+	// Generate Mermaid diagram
+	mermaidDiagram := depGraph.ToMermaid()
+
+	// Print to stdout (and only Mermaid, nothing else)
+	fmt.Print(mermaidDiagram)
+
 	return 0
 }
