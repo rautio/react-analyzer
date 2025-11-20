@@ -561,6 +561,15 @@ export class GraphWebview {
                         }
                     },
                     {
+                        selector: 'edge.prop-drilling',
+                        style: {
+                            'line-color': '#f59e0b',
+                            'target-arrow-color': '#f59e0b',
+                            'line-style': 'solid',
+                            'width': 4
+                        }
+                    },
+                    {
                         selector: '.highlighted',
                         style: {
                             'overlay-color': '#60a5fa',
@@ -701,6 +710,19 @@ export class GraphWebview {
             const nodes = [];
             const edges = [];
 
+            // Identify props involved in drilling violations
+            const propDrillingProps = new Set();
+            if (issues) {
+                issues.forEach(issue => {
+                    if (issue.rule === 'deep-prop-drilling') {
+                        const propMatch = issue.message.match(/'(\w+)'/);
+                        if (propMatch) {
+                            propDrillingProps.add(propMatch[1]);
+                        }
+                    }
+                });
+            }
+
             // Helper to determine node type (origin/passthrough/consumer/regular)
             function getNodeType(node, graph) {
                 const hasState = node.stateNodes && node.stateNodes.length > 0;
@@ -812,6 +834,10 @@ export class GraphWebview {
                             classes.push('stable-primitive');
                             console.log('  -> Applied class: stable-primitive (GRAY)');
                         }
+                    } else if (propDrillingProps.has(edge.propName)) {
+                        // Amber: Part of prop drilling violation (only if no stability class applied)
+                        classes.push('prop-drilling');
+                        console.log('  -> Applied class: prop-drilling (AMBER) for prop:', edge.propName);
                     }
                 }
 
@@ -1060,11 +1086,16 @@ export class GraphWebview {
                     collection.merge(traceUpstream(sourceNode, edge, edgePropName));
                 }
                 else if (edge.data('edgeType') === 'defines') {
-                    // For "defines" edges, always follow (these connect to state nodes)
-                    collection.merge(edge);
+                    // For "defines" edges, check if this is the right state node
                     const sourceNode = edge.source();
-                    collection.merge(sourceNode);
-                    collection.merge(traceUpstream(sourceNode, edge, propName));
+                    const sourceLabel = sourceNode.data('label').split(' ')[0]; // Extract state name before type info
+
+                    // Match if the state name matches our lookup prop
+                    if (sourceLabel === lookupProp) {
+                        collection.merge(edge);
+                        collection.merge(sourceNode);
+                        // Don't recurse further - we've reached the state origin
+                    }
                 }
             });
 
