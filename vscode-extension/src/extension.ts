@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { CliRunner } from './cliRunner';
 import { DiagnosticsProvider } from './diagnosticsProvider';
 import { ComponentTreeProvider } from './treeViewProvider';
+import { GraphWebview } from './views/GraphWebview';
 
 let cliRunner: CliRunner;
 let diagnosticsProvider: DiagnosticsProvider;
@@ -110,6 +111,26 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     );
 
+    // Register command: Show dependency graph
+    const showGraphCommand = vscode.commands.registerCommand(
+        'reactAnalyzer.showGraph',
+        async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                vscode.window.showErrorMessage('No active editor');
+                return;
+            }
+
+            const filePath = editor.document.uri.fsPath;
+            if (!isReactFile(filePath)) {
+                vscode.window.showInformationMessage('Please open a React file (.tsx, .jsx, .ts, .js)');
+                return;
+            }
+
+            await GraphWebview.show(context.extensionUri, filePath);
+        }
+    );
+
     // Register event: Analyze on save (if enabled)
     const onSaveHandler = vscode.workspace.onDidSaveTextDocument(async (document) => {
         const config = vscode.workspace.getConfiguration('reactAnalyzer');
@@ -128,6 +149,7 @@ export async function activate(context: vscode.ExtensionContext) {
         clearDiagnosticsCommand,
         refreshTreeCommand,
         navigateCommand,
+        showGraphCommand,
         onSaveHandler,
         diagnosticsProvider
     );

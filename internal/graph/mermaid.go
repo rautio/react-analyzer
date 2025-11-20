@@ -17,7 +17,7 @@ func (g *Graph) ToMermaid() string {
 	// Track written nodes to avoid duplicates
 	writtenNodes := make(map[string]bool)
 
-	// Write component nodes with metadata
+	// Write component nodes
 	for id, node := range g.ComponentNodes {
 		if writtenNodes[id] {
 			continue
@@ -27,19 +27,54 @@ func (g *Graph) ToMermaid() string {
 		// Sanitize ID for Mermaid (no special characters)
 		nodeID := sanitizeID(id)
 
-		// Create node label (just the component name for now)
+		// Create node label with memoization indicator
 		label := node.Name
+		if node.IsMemoized {
+			label = "⚡ " + label
+		}
 
 		// Write node definition
 		sb.WriteString(fmt.Sprintf("    %s[\"%s\"]\n", nodeID, label))
+	}
 
-		// Write metadata as comment for custom parsing
-		sb.WriteString(fmt.Sprintf("    %%%%{meta: %s, file: \"%s\", line: %d, type: \"%s\", memoized: %t}%%%%\n",
+	// Write state nodes
+	for id, state := range g.StateNodes {
+		if writtenNodes[id] {
+			continue
+		}
+		writtenNodes[id] = true
+
+		nodeID := sanitizeID(id)
+
+		// Create label with state type and name
+		label := fmt.Sprintf("%s: %s", state.Type, state.Name)
+
+		// Use different shape for state nodes (rounded)
+		sb.WriteString(fmt.Sprintf("    %s(\"%s\")\n", nodeID, label))
+	}
+
+	sb.WriteString("\n")
+
+	// Write metadata as comments after all node definitions
+	sb.WriteString("    %% Metadata\n")
+	for id, node := range g.ComponentNodes {
+		nodeID := sanitizeID(id)
+		sb.WriteString(fmt.Sprintf("    %%%% meta:%s|file:%s|line:%d|type:%s|memoized:%t|nodetype:component\n",
 			nodeID,
 			node.Location.FilePath,
 			node.Location.Line,
 			getNodeType(node, g),
 			node.IsMemoized,
+		))
+	}
+	for id, state := range g.StateNodes {
+		nodeID := sanitizeID(id)
+		sb.WriteString(fmt.Sprintf("    %%%% meta:%s|file:%s|line:%d|type:state|memoized:false|nodetype:state|statetype:%s|datatype:%s\n",
+			nodeID,
+			state.Location.FilePath,
+			state.Location.Line,
+			state.Type,
+			state.DataType,
 		))
 	}
 
@@ -65,24 +100,74 @@ func (g *Graph) ToMermaid() string {
 
 	sb.WriteString("\n")
 
-	// Write styling based on node types
+	// Write styling based on node types with better colors and contrast
 	for id, node := range g.ComponentNodes {
 		nodeID := sanitizeID(id)
 		nodeType := getNodeType(node, g)
 
-		var color string
+		var fillColor, strokeColor, textColor string
 		switch nodeType {
 		case "origin":
-			color = "#e1f5e1" // Green for state origin
+			// State origin - vibrant green with dark text
+			fillColor = "#10b981"
+			strokeColor = "#059669"
+			textColor = "#ffffff"
 		case "passthrough":
-			color = "#fff4e1" // Yellow for passthrough
+			// Passthrough - vibrant orange with dark text
+			fillColor = "#f59e0b"
+			strokeColor = "#d97706"
+			textColor = "#ffffff"
 		case "consumer":
-			color = "#e1f0ff" // Blue for consumer
+			// Consumer - vibrant blue with white text
+			fillColor = "#3b82f6"
+			strokeColor = "#2563eb"
+			textColor = "#ffffff"
 		default:
-			color = "#f5f5f5" // Gray for regular components
+			// Regular components - neutral gray with dark text
+			fillColor = "#9ca3af"
+			strokeColor = "#6b7280"
+			textColor = "#ffffff"
 		}
 
-		sb.WriteString(fmt.Sprintf("    style %s fill:%s\n", nodeID, color))
+		sb.WriteString(fmt.Sprintf("    style %s fill:%s,stroke:%s,stroke-width:2px,color:%s\n",
+			nodeID, fillColor, strokeColor, textColor))
+	}
+
+	// Write styling for state nodes
+	for id, state := range g.StateNodes {
+		nodeID := sanitizeID(id)
+
+		var fillColor, strokeColor, textColor string
+		switch state.Type {
+		case StateTypeUseState:
+			// useState - purple
+			fillColor = "#a855f7"
+			strokeColor = "#9333ea"
+			textColor = "#ffffff"
+		case StateTypeUseReducer:
+			// useReducer - deep purple
+			fillColor = "#7c3aed"
+			strokeColor = "#6d28d9"
+			textColor = "#ffffff"
+		case StateTypeContext:
+			// Context - pink
+			fillColor = "#ec4899"
+			strokeColor = "#db2777"
+			textColor = "#ffffff"
+		case StateTypeProp:
+			// Prop - cyan
+			fillColor = "#06b6d4"
+			strokeColor = "#0891b2"
+			textColor = "#ffffff"
+		default:
+			// Derived/unknown - teal
+			fillColor = "#14b8a6"
+			strokeColor = "#0d9488"
+			textColor = "#ffffff"
+		}
+
+		sb.WriteString(fmt.Sprintf("    style %s fill:%s,stroke:%s,stroke-width:2px,color:%s\n",
+			nodeID, fillColor, strokeColor, textColor))
 	}
 
 	return sb.String()

@@ -1,0 +1,607 @@
+import * as vscode from 'vscode';
+import * as path from 'path';
+import * as child_process from 'child_process';
+
+export class GraphWebview {
+    private static currentPanel: GraphWebview | undefined;
+    private readonly _panel: vscode.WebviewPanel;
+    private readonly _extensionUri: vscode.Uri;
+    private readonly _cliPath: string;
+    private _disposables: vscode.Disposable[] = [];
+
+    public static async show(extensionUri: vscode.Uri, filePath?: string) {
+        const column = vscode.window.activeTextEditor
+            ? vscode.window.activeTextEditor.viewColumn
+            : undefined;
+
+        // If we already have a panel, show it
+        if (GraphWebview.currentPanel) {
+            GraphWebview.currentPanel._panel.reveal(vscode.ViewColumn.Two);
+            if (filePath) {
+                await GraphWebview.currentPanel.updateGraph(filePath);
+            }
+            return;
+        }
+
+        // Otherwise, create a new panel
+        const panel = vscode.window.createWebviewPanel(
+            'reactAnalyzerGraph',
+            'React Component Graph',
+            vscode.ViewColumn.Two,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true,
+                localResourceRoots: [
+                    vscode.Uri.joinPath(extensionUri, 'media')
+                ]
+            }
+        );
+
+        GraphWebview.currentPanel = new GraphWebview(panel, extensionUri);
+
+        if (filePath) {
+            await GraphWebview.currentPanel.updateGraph(filePath);
+        }
+    }
+
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+        this._panel = panel;
+        this._extensionUri = extensionUri;
+
+        // Get CLI path from configuration or use bundled binary
+        const configuredPath = vscode.workspace.getConfiguration('reactAnalyzer').get<string>('cliPath');
+        if (configuredPath && configuredPath.length > 0) {
+            this._cliPath = configuredPath;
+        } else {
+            // Use bundled binary from parent directory during development
+            this._cliPath = path.join(path.dirname(extensionUri.fsPath), 'react-analyzer');
+        }
+
+        // Set the webview's initial html content
+        this._panel.webview.html = this._getHtmlContent();
+
+        // Listen for when the panel is disposed
+        this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+
+        // Handle messages from the webview
+        this._panel.webview.onDidReceiveMessage(
+            async (message) => {
+                switch (message.type) {
+                    case 'jumpToSource':
+                        await this.jumpToSource(message.file, message.line);
+                        break;
+                    case 'error':
+                        vscode.window.showErrorMessage(message.message);
+                        break;
+                }
+            },
+            null,
+            this._disposables
+        );
+    }
+
+    public async updateGraph(filePath: string) {
+        try {
+            // Run CLI to get Mermaid output
+            const mermaidOutput = await this.getMermaidDiagram(filePath);
+
+            console.log('Mermaid output length:', mermaidOutput.length);
+            console.log('Mermaid output preview:', mermaidOutput.substring(0, 100));
+
+            // Parse metadata from Mermaid comments
+            const metadata = this.parseMermaidMetadata(mermaidOutput);
+
+            console.log('Parsed metadata:', Object.keys(metadata).length, 'nodes');
+
+            // Send to webview
+            this._panel.webview.postMessage({
+                type: 'renderGraph',
+                mermaid: mermaidOutput,
+                metadata: metadata
+            });
+        } catch (error) {
+            console.error('Update graph error:', error);
+            vscode.window.showErrorMessage(`Failed to generate graph: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+
+    private async getMermaidDiagram(filePath: string): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const args = ['-mermaid', filePath];
+
+            console.log(`Running: ${this._cliPath} ${args.join(' ')}`);
+
+            const process = child_process.spawn(this._cliPath, args);
+
+            let stdout = '';
+            let stderr = '';
+
+            process.stdout.on('data', (data: Buffer) => {
+                stdout += data.toString();
+            });
+
+            process.stderr.on('data', (data: Buffer) => {
+                stderr += data.toString();
+            });
+
+            process.on('error', (error) => {
+                reject(new Error(`Failed to spawn CLI process: ${error.message}`));
+            });
+
+            process.on('close', (code) => {
+                if (code !== null && code !== 0) {
+                    reject(new Error(`CLI exited with code ${code}: ${stderr}`));
+                    return;
+                }
+
+                resolve(stdout);
+            });
+        });
+    }
+
+    private parseMermaidMetadata(mermaidDiagram: string): Record<string, any> {
+        const metadata: Record<string, any> = {};
+
+        // Parse metadata from comments like:
+        // %% meta:nodeId|file:path|line:10|type:origin|memoized:true|nodetype:component
+        // %% meta:nodeId|file:path|line:10|type:state|memoized:false|nodetype:state|statetype:useState|datatype:primitive
+        const metaRegex = /%%\s*meta:([^|\n]+)\|file:([^|\n]+)\|line:(\d+)\|([^\n]+)/g;
+
+        let match;
+        while ((match = metaRegex.exec(mermaidDiagram)) !== null) {
+            const [, nodeId, file, line, rest] = match;
+
+            // Parse remaining key:value pairs
+            const attrs: Record<string, string> = {};
+            const pairs = rest.split('|');
+            for (const pair of pairs) {
+                const [key, value] = pair.split(':');
+                if (key && value) {
+                    attrs[key.trim()] = value.trim();
+                }
+            }
+
+            metadata[nodeId.trim()] = {
+                file: file,
+                line: parseInt(line),
+                type: attrs.type || 'unknown',
+                memoized: attrs.memoized === 'true',
+                nodeType: attrs.nodetype || 'component',
+                stateType: attrs.statetype,
+                dataType: attrs.datatype
+            };
+        }
+
+        return metadata;
+    }
+
+    private async jumpToSource(filePath: string, line: number) {
+        try {
+            const uri = vscode.Uri.file(filePath);
+            const document = await vscode.workspace.openTextDocument(uri);
+            const editor = await vscode.window.showTextDocument(document, vscode.ViewColumn.One);
+
+            // Jump to the line
+            const position = new vscode.Position(Math.max(0, line - 1), 0);
+            editor.selection = new vscode.Selection(position, position);
+            editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to open file: ${error}`);
+        }
+    }
+
+    private _getHtmlContent(): string {
+        const webview = this._panel.webview;
+
+        // Use a nonce to only allow specific scripts to run
+        const nonce = getNonce();
+
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net; style-src ${webview.cspSource} 'unsafe-inline' https://cdn.jsdelivr.net; img-src ${webview.cspSource} https:;">
+    <title>React Component Graph</title>
+    <script nonce="${nonce}" src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            background-color: var(--vscode-editor-background);
+            color: var(--vscode-editor-foreground);
+            font-family: var(--vscode-font-family);
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .toolbar {
+            padding: 12px;
+            background: var(--vscode-sideBar-background);
+            border-bottom: 1px solid var(--vscode-panel-border);
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .toolbar input {
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            padding: 4px 8px;
+            border-radius: 2px;
+            flex: 1;
+            max-width: 300px;
+        }
+
+        .toolbar button {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 6px 12px;
+            border-radius: 2px;
+            cursor: pointer;
+        }
+
+        .toolbar button:hover {
+            background: var(--vscode-button-hoverBackground);
+        }
+
+        .graph-container {
+            width: 100%;
+            height: calc(100vh - 48px);
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        #mermaid-graph {
+            min-width: 100%;
+        }
+
+        /* Custom node styling */
+        .mermaid .node.state-origin rect {
+            fill: #10b981 !important;
+            stroke: #047857 !important;
+            stroke-width: 2px;
+        }
+
+        .mermaid .node.passthrough rect {
+            fill: #fbbf24 !important;
+            stroke: #f59e0b !important;
+        }
+
+        .mermaid .node.consumer rect {
+            fill: #3b82f6 !important;
+            stroke: #2563eb !important;
+        }
+
+        .mermaid .node.memoized rect {
+            stroke: #a855f7 !important;
+            stroke-width: 3px !important;
+            stroke-dasharray: 5, 5;
+        }
+
+        /* Hover effects */
+        .mermaid .node:hover rect {
+            filter: brightness(1.2) drop-shadow(0 0 8px currentColor);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        /* Highlighted state */
+        .mermaid .node.highlighted rect {
+            stroke: #ef4444 !important;
+            stroke-width: 4px !important;
+        }
+
+        .detail-panel {
+            position: fixed;
+            right: 0;
+            top: 48px;
+            width: 300px;
+            height: calc(100vh - 48px);
+            background: var(--vscode-sideBar-background);
+            border-left: 1px solid var(--vscode-panel-border);
+            padding: 16px;
+            overflow-y: auto;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+
+        .detail-panel.visible {
+            transform: translateX(0);
+        }
+
+        .detail-panel h3 {
+            margin-top: 0;
+            color: var(--vscode-editor-foreground);
+        }
+
+        .detail-panel .close-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: transparent;
+            border: none;
+            color: var(--vscode-editor-foreground);
+            cursor: pointer;
+            font-size: 20px;
+            padding: 4px 8px;
+        }
+
+        .detail-panel .close-btn:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            font-size: 18px;
+            color: var(--vscode-descriptionForeground);
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <input id="search" type="text" placeholder="Search components..." />
+        <button id="reset-zoom">Reset View</button>
+        <button id="reset-highlight">Clear Highlights</button>
+    </div>
+
+    <div class="graph-container">
+        <div id="mermaid-graph" class="mermaid">
+            <div class="loading">Loading graph...</div>
+        </div>
+    </div>
+
+    <div id="detail-panel" class="detail-panel">
+        <button class="close-btn" id="close-detail">&times;</button>
+        <h3 id="detail-title">Component Details</h3>
+        <div id="detail-content"></div>
+    </div>
+
+    <script nonce="${nonce}">
+        const vscode = acquireVsCodeApi();
+        let metadata = {};
+        let currentHighlights = [];
+
+        // Initialize Mermaid
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'base',
+            themeVariables: {
+                primaryColor: '#1e293b',
+                primaryTextColor: '#e2e8f0',
+                primaryBorderColor: '#475569',
+                lineColor: '#64748b'
+            }
+        });
+
+        // Handle messages from extension
+        window.addEventListener('message', async event => {
+            const message = event.data;
+            console.log('Received message:', message.type);
+
+            switch (message.type) {
+                case 'renderGraph':
+                    console.log('Rendering graph, mermaid length:', message.mermaid?.length);
+                    console.log('Metadata keys:', Object.keys(message.metadata || {}).length);
+                    await renderGraph(message.mermaid, message.metadata);
+                    break;
+            }
+        });
+
+        async function renderGraph(mermaidSyntax, meta) {
+            metadata = meta;
+            const container = document.getElementById('mermaid-graph');
+
+            try {
+                // Render Mermaid using the v10 API
+                const { svg } = await mermaid.render('mermaid-diagram', mermaidSyntax);
+                container.innerHTML = svg;
+
+                // Enhance with custom interactions
+                enhanceGraph();
+            } catch (error) {
+                console.error('Mermaid rendering error:', error);
+                container.innerHTML = '<div class="loading">Failed to render graph: ' + error.message + '</div>';
+                vscode.postMessage({ type: 'error', message: 'Failed to render graph: ' + error.message });
+            }
+        }
+
+        function enhanceGraph() {
+            const container = document.getElementById('mermaid-graph');
+            const svg = container.querySelector('svg');
+            if (!svg) {
+                console.error('SVG not found in container');
+                return;
+            }
+
+            // Add click handlers to all nodes
+            svg.querySelectorAll('.node').forEach(node => {
+                const nodeId = node.getAttribute('id');
+                const meta = metadata[nodeId];
+
+                if (!meta) return;
+
+                // Add CSS class for styling
+                node.classList.add(meta.type);
+                if (meta.memoized) node.classList.add('memoized');
+
+                // Click handler
+                node.addEventListener('click', () => {
+                    // Jump to source
+                    vscode.postMessage({
+                        type: 'jumpToSource',
+                        file: meta.file,
+                        line: meta.line
+                    });
+
+                    // Show detail panel
+                    showDetailPanel(nodeId, meta);
+
+                    // Highlight connected nodes
+                    highlightConnectedNodes(nodeId);
+                });
+
+                // Store metadata for search
+                node.setAttribute('data-name', nodeId);
+            });
+
+            // Enable zoom/pan (basic implementation)
+            let isPanning = false;
+            let startX, startY;
+            const graphContainer = document.querySelector('.graph-container');
+
+            graphContainer.addEventListener('mousedown', (e) => {
+                if (e.target === graphContainer || e.target === svg) {
+                    isPanning = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    graphContainer.style.cursor = 'grabbing';
+                }
+            });
+
+            graphContainer.addEventListener('mousemove', (e) => {
+                if (isPanning) {
+                    const dx = e.clientX - startX;
+                    const dy = e.clientY - startY;
+                    graphContainer.scrollLeft -= dx;
+                    graphContainer.scrollTop -= dy;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                }
+            });
+
+            graphContainer.addEventListener('mouseup', () => {
+                isPanning = false;
+                graphContainer.style.cursor = 'default';
+            });
+        }
+
+        function highlightConnectedNodes(nodeId) {
+            // Clear previous highlights
+            clearHighlights();
+
+            const svg = document.querySelector('.mermaid svg');
+            if (!svg) return;
+
+            // Find edges connected to this node
+            svg.querySelectorAll('.edgePath').forEach(edge => {
+                const edgeId = edge.getAttribute('id');
+                if (edgeId && edgeId.includes(nodeId)) {
+                    // Extract connected node ID
+                    const match = edgeId.match(/flowchart-([^-]+)-([^-]+)/);
+                    if (match) {
+                        const [, from, to] = match;
+                        const connectedId = from === nodeId ? to : from;
+                        const connectedNode = document.getElementById(connectedId);
+                        if (connectedNode) {
+                            connectedNode.classList.add('highlighted');
+                            currentHighlights.push(connectedNode);
+                        }
+                    }
+                }
+            });
+        }
+
+        function clearHighlights() {
+            currentHighlights.forEach(node => node.classList.remove('highlighted'));
+            currentHighlights = [];
+        }
+
+        function showDetailPanel(nodeId, meta) {
+            const panel = document.getElementById('detail-panel');
+            const title = document.getElementById('detail-title');
+            const content = document.getElementById('detail-content');
+
+            title.textContent = nodeId.replace(/_/g, ' ').replace(/component /g, '').replace(/state /g, '');
+
+            let detailsHtml = \`
+                <p><strong>File:</strong> \${meta.file.split('/').pop()}</p>
+                <p><strong>Line:</strong> \${meta.line}</p>
+            \`;
+
+            if (meta.nodeType === 'state') {
+                // State node details
+                detailsHtml += \`
+                    <p><strong>Node Type:</strong> State</p>
+                    <p><strong>State Type:</strong> \${meta.stateType}</p>
+                    <p><strong>Data Type:</strong> \${meta.dataType}</p>
+                \`;
+            } else {
+                // Component node details
+                detailsHtml += \`
+                    <p><strong>Node Type:</strong> Component</p>
+                    <p><strong>Role:</strong> \${meta.type}</p>
+                    <p><strong>Memoized:</strong> \${meta.memoized ? '⚡ Yes' : 'No'}</p>
+                \`;
+            }
+
+            detailsHtml += \`
+                <p><strong>Full Path:</strong><br/><small>\${meta.file}</small></p>
+            \`;
+
+            content.innerHTML = detailsHtml;
+            panel.classList.add('visible');
+        }
+
+        function hideDetailPanel() {
+            document.getElementById('detail-panel').classList.remove('visible');
+        }
+
+        // Toolbar interactions
+        document.getElementById('search').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            document.querySelectorAll('.node').forEach(node => {
+                const name = node.getAttribute('data-name');
+                if (name && query && !name.toLowerCase().includes(query)) {
+                    node.style.opacity = '0.3';
+                } else {
+                    node.style.opacity = '1';
+                }
+            });
+        });
+
+        document.getElementById('reset-zoom').addEventListener('click', () => {
+            document.querySelector('.graph-container').scrollTo(0, 0);
+        });
+
+        document.getElementById('reset-highlight').addEventListener('click', () => {
+            clearHighlights();
+        });
+
+        document.getElementById('close-detail').addEventListener('click', () => {
+            hideDetailPanel();
+        });
+    </script>
+</body>
+</html>`;
+    }
+
+    public dispose() {
+        GraphWebview.currentPanel = undefined;
+
+        this._panel.dispose();
+
+        while (this._disposables.length) {
+            const disposable = this._disposables.pop();
+            if (disposable) {
+                disposable.dispose();
+            }
+        }
+    }
+}
+
+function getNonce() {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+}

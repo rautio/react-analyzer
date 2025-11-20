@@ -47,6 +47,11 @@
       {
         "command": "reactAnalyzer.navigateToLocation",
         "title": "Navigate to Location"
+      },
+      {
+        "command": "reactAnalyzer.showGraph",
+        "title": "React Analyzer: Show Dependency Graph",
+        "icon": "$(graph)"
       }
     ],
     "views": {
