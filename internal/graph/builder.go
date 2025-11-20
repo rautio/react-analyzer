@@ -59,17 +59,22 @@ func (b *Builder) Build() (*Graph, error) {
 
 // discoverAndParseImports recursively discovers and parses all imported files
 // This ensures the graph builder has all necessary modules even when analyzing a single file
+// Currently only traverses downward (files imported by the current file)
+// TODO: Implement reverse import index for upward traversal (files that import the current file)
+// This would enable prop drilling detection when starting from leaf components
 func (b *Builder) discoverAndParseImports() {
 	visited := make(map[string]bool)
 
 	// Start with all currently loaded modules
 	modules := b.resolver.GetModules()
+
 	for filePath := range modules {
+		// Traverse down: files this file imports
 		b.discoverImportsRecursive(filePath, visited)
 	}
 }
 
-// discoverImportsRecursive recursively parses imported files
+// discoverImportsRecursive recursively parses imported files (downward traversal)
 func (b *Builder) discoverImportsRecursive(filePath string, visited map[string]bool) {
 	// Skip if already visited
 	if visited[filePath] {
