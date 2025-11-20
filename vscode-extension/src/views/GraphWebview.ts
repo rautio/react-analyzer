@@ -691,10 +691,16 @@ export class GraphWebview {
 
             // Transform state nodes
             Object.entries(graph.stateNodes || {}).forEach(([id, node]) => {
+                // Format: name (type) - cleaner, less distinctive
+                let label = node.name;
+                if (node.dataType && node.dataType !== 'unknown') {
+                    label += ' (' + node.dataType + ')';
+                }
+
                 nodes.push({
                     data: {
                         id: id,
-                        label: node.type + ': ' + node.name,
+                        label: label,
                         type: 'state',
                         nodeType: 'state',
                         file: node.location.filePath,
@@ -714,6 +720,11 @@ export class GraphWebview {
                 // Use stability data from backend to determine edge styling
                 if (edge.type === 'passes' && edge.propName) {
                     console.log('Processing passes edge:', edge.propName, 'isStable:', edge.isStable, 'breaksMemo:', edge.breaksMemoization, 'reason:', edge.stabilityReason);
+
+                    // Add data type to label in parentheses if present
+                    if (edge.propDataType && edge.propDataType !== 'unknown') {
+                        label = label + ' (' + edge.propDataType + ')';
+                    }
 
                     // Determine class based on stability
                     if (edge.breaksMemoization) {
@@ -740,11 +751,6 @@ export class GraphWebview {
                             classes.push('stable-primitive');
                             console.log('  -> Applied class: stable-primitive (GRAY)');
                         }
-                    }
-
-                    // Add data type to label if present
-                    if (edge.propDataType && edge.propDataType !== 'unknown') {
-                        label = label + ': ' + edge.propDataType;
                     }
                 }
 
@@ -793,6 +799,14 @@ export class GraphWebview {
             html += '<p><strong>Type:</strong> ' + (data.nodeType || 'component') + '</p>';
             html += '<p><strong>File:</strong> ' + (data.file ? data.file.split('/').pop() : 'N/A') + '</p>';
             html += '<p><strong>Line:</strong> ' + (data.line || 'N/A') + '</p>';
+
+            if (data.nodeType === 'state' && data.dataType) {
+                html += '<p><strong>Data Type:</strong> ' + data.dataType + '</p>';
+            }
+
+            if (data.nodeType === 'state' && data.stateType) {
+                html += '<p><strong>State Type:</strong> ' + data.stateType + '</p>';
+            }
 
             if (data.memoized) {
                 html += '<p><strong>Memoized:</strong> ⚡ Yes</p>';

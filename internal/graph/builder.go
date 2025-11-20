@@ -377,46 +377,38 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 				continue
 			}
 
+			// Track ALL props being passed to child
+			propsPassedToChild = append(propsPassedToChild, propName)
+
+			// Infer prop data type from the value node
+			propDataType := b.inferPropDataType(valueNode)
+
+			// Determine prop stability
+			isStable := b.isStableValue(valueNode)
+			stabilityReason := b.getStabilityReason(valueNode)
+
+			// Check if this breaks child's memoization
+			breaksMemo := childComp.IsMemoized && !isStable
+
+			// Create "passes" edge for this prop
+			line, col := child.StartPoint()
+			edge := Edge{
+				ID:                GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
+				SourceID:          parentComp.ID,
+				TargetID:          childComp.ID,
+				Type:              EdgeTypePasses,
+				PropName:          propName,
+				PropDataType:      propDataType,
+				IsStable:          isStable,
+				StabilityReason:   stabilityReason,
+				BreaksMemoization: breaksMemo,
+				Location:          Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+			}
+			b.graph.AddEdge(edge)
+
+			// Additional tracking for member expressions to support prop drilling detection
 			if valueNode.Type() == "jsx_expression" {
-				// Check if value is a reference to parent's prop
 				for _, exprChild := range valueNode.Children() {
-					// Handle simple identifier: <Child theme={theme} />
-					if exprChild.Type() == "identifier" {
-						varName := exprChild.Text()
-
-						// Check if this identifier matches a prop or state from parent
-						if b.isParentVariable(varName, parentComp) {
-							propsPassedToChild = append(propsPassedToChild, propName)
-
-							// Infer prop data type from the value node
-							propDataType := b.inferPropDataType(valueNode)
-
-							// Determine prop stability
-							isStable := b.isStableValue(valueNode)
-							stabilityReason := b.getStabilityReason(valueNode)
-
-							// Check if this breaks child's memoization
-							breaksMemo := childComp.IsMemoized && !isStable
-
-							// Create "passes" edge (include propName in ID to allow multiple props)
-							line, col := child.StartPoint()
-							edge := Edge{
-								ID:                GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
-								SourceID:          parentComp.ID,
-								TargetID:          childComp.ID,
-								Type:              EdgeTypePasses,
-								PropName:          propName,
-								PropDataType:      propDataType,
-								IsStable:          isStable,
-								StabilityReason:   stabilityReason,
-								BreaksMemoization: breaksMemo,
-								Location:          Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
-							}
-							b.graph.AddEdge(edge)
-						}
-					}
-
-					// Handle member expression: <Child locale={settings.locale} />
 					if exprChild.Type() == "member_expression" {
 						objectName, propertyName := b.extractMemberExpression(exprChild)
 						if objectName != "" && propertyName != "" {
@@ -425,34 +417,6 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 								// Create or find virtual state node for this property
 								// This allows prop drilling detection to trace from object.property
 								b.ensurePropertyStateNode(objectName, propertyName, parentComp, filePath)
-
-								propsPassedToChild = append(propsPassedToChild, propName)
-
-								// Infer prop data type from the value node
-								propDataType := b.inferPropDataType(valueNode)
-
-								// Determine prop stability
-								isStable := b.isStableValue(valueNode)
-								stabilityReason := b.getStabilityReason(valueNode)
-
-								// Check if this breaks child's memoization
-								breaksMemo := childComp.IsMemoized && !isStable
-
-								// Create "passes" edge with the property name
-								line, col := child.StartPoint()
-								edge := Edge{
-									ID:                GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
-									SourceID:          parentComp.ID,
-									TargetID:          childComp.ID,
-									Type:              EdgeTypePasses,
-									PropName:          propName,
-									PropDataType:      propDataType,
-									IsStable:          isStable,
-									StabilityReason:   stabilityReason,
-									BreaksMemoization: breaksMemo,
-									Location:          Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
-								}
-								b.graph.AddEdge(edge)
 							}
 						}
 					}
@@ -1063,13 +1027,26 @@ func (b *Builder) handleUseStateWithPattern(useStateNode *parser.Node, pattern *
 		}
 	}
 
+	// Infer data type from useState initial value
+	dataType := DataTypeUnknown
+	args := useStateNode.ChildByFieldName("arguments")
+	if args != nil {
+		// Get first argument (initial value)
+		for _, child := range args.Children() {
+			if child.Type() != "(" && child.Type() != ")" && child.Type() != "," {
+				dataType = b.inferPropDataType(child)
+				break
+			}
+		}
+	}
+
 	stateID := GenerateStateID(component.Name, stateName, filePath, line+1)
 
 	stateNode := &StateNode{
 		ID:       stateID,
 		Name:     stateName,
 		Type:     StateTypeUseState,
-		DataType: DataTypeUnknown, // TODO: Infer from initial value
+		DataType: dataType,
 		Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: component.Name},
 		Mutable:  true,
 	}
