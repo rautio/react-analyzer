@@ -537,6 +537,26 @@ export class GraphWebview {
                             'line-style': 'solid',
                             'width': 2.5
                         }
+                    },
+                    {
+                        selector: '.highlighted',
+                        style: {
+                            'overlay-color': '#60a5fa',
+                            'overlay-opacity': 0.3,
+                            'overlay-padding': 8
+                        }
+                    },
+                    {
+                        selector: 'node.dimmed',
+                        style: {
+                            'opacity': 0.3
+                        }
+                    },
+                    {
+                        selector: 'edge.dimmed',
+                        style: {
+                            'opacity': 0.2
+                        }
                     }
                 ],
                 layout: {
@@ -553,10 +573,17 @@ export class GraphWebview {
                 showNodeDetails(node);
             });
 
+            // Click handler for edges
+            cy.on('tap', 'edge', function(evt) {
+                const edge = evt.target;
+                showEdgeDetails(edge);
+            });
+
             // Close detail panel when clicking background
             cy.on('tap', function(evt) {
                 if (evt.target === cy) {
                     hideDetailPanel();
+                    clearHighlights();
                 }
             });
         }
@@ -763,7 +790,8 @@ export class GraphWebview {
                         edgeType: edge.type,
                         isStable: edge.isStable,
                         stabilityReason: edge.stabilityReason,
-                        breaksMemoization: edge.breaksMemoization
+                        breaksMemoization: edge.breaksMemoization,
+                        propSourceVar: edge.propSourceVar || ''
                     },
                     classes: classes.join(' ')
                 });
@@ -792,6 +820,9 @@ export class GraphWebview {
             const panel = document.getElementById('detail-panel');
             const title = document.getElementById('detail-title');
             const content = document.getElementById('detail-content');
+
+            // Clear previous highlights
+            clearHighlights();
 
             title.textContent = data.label.replace(/^⚠\\\\s*/, '').replace(/\\\\s*\\\\(\\\\d+\\\\)$/, '');
 
@@ -844,6 +875,181 @@ export class GraphWebview {
                     });
                 };
             }
+        }
+
+        function showEdgeDetails(edge) {
+            const data = edge.data();
+            const panel = document.getElementById('detail-panel');
+            const title = document.getElementById('detail-title');
+            const content = document.getElementById('detail-content');
+
+            // Clear previous highlights and highlight related nodes
+            clearHighlights();
+            highlightEdgeContext(edge);
+
+            title.textContent = 'Prop: ' + data.label;
+
+            let html = '<div class="detail-info">';
+            html += '<p><strong>Type:</strong> edge (prop passing)</p>';
+            html += '<p><strong>Prop Name:</strong> ' + (data.label || 'N/A') + '</p>';
+
+            if (data.dataType && data.dataType !== 'unknown') {
+                html += '<p><strong>Data Type:</strong> ' + data.dataType + '</p>';
+            }
+
+            if (data.isStable !== undefined) {
+                const stabilityText = data.isStable ? '✓ Stable' : '⚠ Unstable';
+                const stabilityColor = data.isStable ? 'var(--vscode-testing-iconPassed)' : 'var(--vscode-errorForeground)';
+                html += '<p><strong>Stability:</strong> <span style="color: ' + stabilityColor + '">' + stabilityText + '</span></p>';
+            }
+
+            if (data.stabilityReason) {
+                html += '<p><strong>Reason:</strong> ' + data.stabilityReason + '</p>';
+                if (data.stabilityReason === 'member-expression' && data.propSourceVar) {
+                    html += '<p style="font-size: 11px; color: var(--vscode-descriptionForeground);">Extracted from: <code>' + data.propSourceVar + '.' + data.label.split(' ')[0] + '</code></p>';
+                    html += '<p style="font-size: 11px; color: var(--vscode-descriptionForeground);">Upstream tracing will follow the <code>' + data.propSourceVar + '</code> prop chain.</p>';
+                }
+            }
+
+            if (data.breaksMemoization) {
+                html += '<p style="color: var(--vscode-errorForeground); font-weight: bold;">⚠ BREAKS MEMOIZATION</p>';
+                html += '<p style="font-size: 11px; line-height: 1.4;">This unstable prop is passed to a React.memo component, which will cause unnecessary re-renders.</p>';
+            }
+
+            // Show source and target info
+            const sourceNode = cy.getElementById(data.source);
+            const targetNode = cy.getElementById(data.target);
+            if (sourceNode && targetNode) {
+                html += '<hr style="margin: 12px 0; border: none; border-top: 1px solid var(--vscode-panel-border);">';
+                html += '<p><strong>From:</strong> ' + sourceNode.data('label') + '</p>';
+                html += '<p><strong>To:</strong> ' + targetNode.data('label') + '</p>';
+            }
+
+            // Show chain depth information
+            const propName = data.label.split(' ')[0];
+            const upstreamCount = traceUpstream(sourceNode, edge, propName).nodes().length;
+            const downstreamCount = traceDownstream(targetNode, edge, propName).nodes().length;
+            const totalChainDepth = upstreamCount + 2 + downstreamCount; // upstream + source + target + downstream
+
+            if (upstreamCount > 0 || downstreamCount > 0) {
+                html += '<hr style="margin: 12px 0; border: none; border-top: 1px solid var(--vscode-panel-border);">';
+                html += '<p><strong>Chain Depth:</strong> ' + totalChainDepth + ' components</p>';
+                if (upstreamCount > 0) {
+                    html += '<p style="font-size: 11px;">↑ ' + upstreamCount + ' component(s) upstream to origin</p>';
+                }
+                if (downstreamCount > 0) {
+                    html += '<p style="font-size: 11px;">↓ ' + downstreamCount + ' component(s) downstream</p>';
+                }
+                html += '<p style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 8px;">The full chain is highlighted in the graph.</p>';
+            }
+
+            html += '</div>';
+
+            content.innerHTML = html;
+            panel.classList.add('visible');
+        }
+
+        function highlightEdgeContext(edge) {
+            const highlightedElements = cy.collection();
+            const propName = edge.data('label').split(' ')[0]; // Extract prop name from label (before any type info)
+
+            // Add the clicked edge and its nodes
+            highlightedElements.merge(edge);
+            highlightedElements.merge(edge.source());
+            highlightedElements.merge(edge.target());
+
+            // Trace upstream: Find the path from source back to the origin (state node)
+            const upstream = traceUpstream(edge.source(), edge, propName);
+            highlightedElements.merge(upstream);
+
+            // Trace downstream: Find all paths from target to consumers
+            const downstream = traceDownstream(edge.target(), edge, propName);
+            highlightedElements.merge(downstream);
+
+            // Highlight the collected elements
+            highlightedElements.addClass('highlighted');
+
+            // Dim everything else
+            cy.elements().not(highlightedElements).addClass('dimmed');
+        }
+
+        function traceUpstream(node, originEdge, propName) {
+            const collection = cy.collection();
+
+            // If the origin edge has a propSourceVar (member expression), look for that instead
+            const originData = originEdge.data();
+            const lookupProp = originData.propSourceVar || propName;
+
+            // Get incoming edges (edges pointing TO this node)
+            const incomingEdges = node.incomers('edge[edgeType="passes"], edge[edgeType="defines"]');
+
+            incomingEdges.forEach(edge => {
+                // Don't trace back through the edge we came from
+                if (edge.id() === originEdge.id()) {
+                    return;
+                }
+
+                // For "passes" edges, check if it matches our lookup prop
+                if (edge.data('edgeType') === 'passes') {
+                    const edgePropName = edge.data('label').split(' ')[0];
+                    if (edgePropName !== lookupProp) {
+                        return; // Skip this edge, it's for a different prop
+                    }
+
+                    // Continue tracing with the matched prop name
+                    collection.merge(edge);
+                    const sourceNode = edge.source();
+                    collection.merge(sourceNode);
+                    collection.merge(traceUpstream(sourceNode, edge, edgePropName));
+                }
+                else if (edge.data('edgeType') === 'defines') {
+                    // For "defines" edges, always follow (these connect to state nodes)
+                    collection.merge(edge);
+                    const sourceNode = edge.source();
+                    collection.merge(sourceNode);
+                    collection.merge(traceUpstream(sourceNode, edge, propName));
+                }
+            });
+
+            return collection;
+        }
+
+        function traceDownstream(node, originEdge, propName) {
+            const collection = cy.collection();
+
+            // Get outgoing edges (edges starting FROM this node)
+            const outgoingEdges = node.outgoers('edge[edgeType="passes"], edge[edgeType="consumes"]');
+
+            outgoingEdges.forEach(edge => {
+                // Don't trace back through the edge we came from
+                if (edge.id() === originEdge.id()) {
+                    return;
+                }
+
+                // For "passes" edges, only follow if it's the same prop
+                if (edge.data('edgeType') === 'passes') {
+                    const edgePropName = edge.data('label').split(' ')[0];
+                    if (edgePropName !== propName) {
+                        return; // Skip this edge, it's for a different prop
+                    }
+                }
+
+                // For "consumes" edges, always follow (these connect to state consumers)
+
+                // Add this edge and its target
+                collection.merge(edge);
+                const targetNode = edge.target();
+                collection.merge(targetNode);
+
+                // Recursively trace downstream from the target
+                collection.merge(traceDownstream(targetNode, edge, propName));
+            });
+
+            return collection;
+        }
+
+        function clearHighlights() {
+            cy.elements().removeClass('highlighted dimmed');
         }
 
         function hideDetailPanel() {

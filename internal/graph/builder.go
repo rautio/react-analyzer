@@ -390,6 +390,20 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 			// Check if this breaks child's memoization
 			breaksMemo := childComp.IsMemoized && !isStable
 
+			// Extract source variable for member expressions (e.g., "config" from "config.threshold")
+			propSourceVar := ""
+			if valueNode.Type() == "jsx_expression" {
+				for _, exprChild := range valueNode.Children() {
+					if exprChild.Type() == "member_expression" {
+						objectName, _ := b.extractMemberExpression(exprChild)
+						if objectName != "" {
+							propSourceVar = objectName
+							break
+						}
+					}
+				}
+			}
+
 			// Create "passes" edge for this prop
 			line, col := child.StartPoint()
 			edge := Edge{
@@ -399,6 +413,7 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 				Type:              EdgeTypePasses,
 				PropName:          propName,
 				PropDataType:      propDataType,
+				PropSourceVar:     propSourceVar,
 				IsStable:          isStable,
 				StabilityReason:   stabilityReason,
 				BreaksMemoization: breaksMemo,
@@ -407,19 +422,12 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 			b.graph.AddEdge(edge)
 
 			// Additional tracking for member expressions to support prop drilling detection
-			if valueNode.Type() == "jsx_expression" {
-				for _, exprChild := range valueNode.Children() {
-					if exprChild.Type() == "member_expression" {
-						objectName, propertyName := b.extractMemberExpression(exprChild)
-						if objectName != "" && propertyName != "" {
-							// Check if the object is a parent variable (state or prop)
-							if b.isParentVariable(objectName, parentComp) {
-								// Create or find virtual state node for this property
-								// This allows prop drilling detection to trace from object.property
-								b.ensurePropertyStateNode(objectName, propertyName, parentComp, filePath)
-							}
-						}
-					}
+			if propSourceVar != "" {
+				_, propertyName := b.extractMemberExpression(valueNode.Children()[0])
+				if propertyName != "" && b.isParentVariable(propSourceVar, parentComp) {
+					// Create or find virtual state node for this property
+					// This allows prop drilling detection to trace from object.property
+					b.ensurePropertyStateNode(propSourceVar, propertyName, parentComp, filePath)
 				}
 			}
 		}
