@@ -359,7 +359,12 @@ export class GraphWebview {
 <body>
     <div class="toolbar">
         <input id="search" type="text" placeholder="Search components..." />
-        <span style="margin-left: 8px; font-size: 11px; font-weight: bold;">Show:</span>
+        <span style="margin-left: 8px; font-size: 11px; font-weight: bold;">Layout:</span>
+        <select id="layout-direction" style="font-size: 11px; margin-left: 4px; padding: 2px;">
+            <option value="LR">Horizontal (LR)</option>
+            <option value="TD">Vertical (TD)</option>
+        </select>
+        <span style="margin-left: 12px; font-size: 11px; font-weight: bold;">Show:</span>
         <label style="font-size: 11px; margin-left: 4px;">
             <input type="checkbox" id="filter-state" checked /> State
         </label>
@@ -395,6 +400,7 @@ export class GraphWebview {
         const vscode = acquireVsCodeApi();
         let metadata = {};
         let currentHighlights = [];
+        let originalMermaidSyntax = '';  // Store original syntax for layout switching
 
         // Initialize Mermaid
         mermaid.initialize({
@@ -424,6 +430,7 @@ export class GraphWebview {
 
         async function renderGraph(mermaidSyntax, meta) {
             metadata = meta;
+            originalMermaidSyntax = mermaidSyntax;  // Store for layout switching
             const container = document.getElementById('mermaid-graph');
 
             try {
@@ -438,6 +445,16 @@ export class GraphWebview {
                 container.innerHTML = '<div class="loading">Failed to render graph: ' + error.message + '</div>';
                 vscode.postMessage({ type: 'error', message: 'Failed to render graph: ' + error.message });
             }
+        }
+
+        async function changeLayout(direction) {
+            if (!originalMermaidSyntax) return;
+
+            // Replace the flowchart direction in the syntax
+            let newSyntax = originalMermaidSyntax.replace(/^flowchart (TD|LR)/m, 'flowchart ' + direction);
+
+            // Re-render with new layout
+            await renderGraph(newSyntax, metadata);
         }
 
         function enhanceGraph() {
@@ -776,6 +793,13 @@ export class GraphWebview {
             document.querySelectorAll('.edgePath, .edgeLabel').forEach(el => {
                 el.style.display = showEdges ? '' : 'none';
             });
+        });
+
+        // Layout direction toggle
+        document.getElementById('layout-direction').addEventListener('change', async (e) => {
+            const direction = e.target.value;
+            console.log('Changing layout to:', direction);
+            await changeLayout(direction);
         });
     </script>
 </body>
