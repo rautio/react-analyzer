@@ -1132,6 +1132,108 @@ func (b *Builder) buildComponentsFromModule(filePath string, module *analyzer.Mo
 	b.buildComponentNodes(module)
 }
 
+// findContextInImports searches for a context in imported files
+func (b *Builder) findContextInImports(contextName, currentFile string) string {
+	// Get the current module to access its imports
+	modules := b.resolver.GetModules()
+	currentModule, exists := modules[currentFile]
+	if !exists {
+		return ""
+	}
+
+	// Search through all imports
+	for _, imp := range currentModule.Imports {
+		// Check if this import includes the context we're looking for
+
+		// Check default import: import ThemeContext from './ThemeContext'
+		if imp.Default == contextName {
+			resolvedPath, err := b.resolver.Resolve(currentFile, imp.Source)
+			if err != nil {
+				continue // Skip unresolved imports (external packages, etc.)
+			}
+
+			// Find context in the imported file
+			contextID := b.findContextInFile(contextName, resolvedPath)
+			if contextID != "" {
+				return contextID
+			}
+		}
+
+		// Check named imports: import { ThemeContext } from './contexts'
+		for _, named := range imp.Named {
+			// LocalName is what it's called in the current file
+			// ImportedName is what it's called in the source file
+			if named.LocalName == contextName {
+				resolvedPath, err := b.resolver.Resolve(currentFile, imp.Source)
+				if err != nil {
+					continue
+				}
+
+				// Search for the original exported name in the imported file
+				contextID := b.findContextInFile(named.ImportedName, resolvedPath)
+				if contextID != "" {
+					return contextID
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+// findContextInFile searches for a context by name in a specific file
+// If the file hasn't been parsed yet, it will be parsed automatically
+func (b *Builder) findContextInFile(contextName, filePath string) string {
+	// First check if context already exists in graph
+	for id, stateNode := range b.graph.StateNodes {
+		if stateNode.Name == contextName && stateNode.Type == StateTypeContext && stateNode.Location.FilePath == filePath {
+			return id
+		}
+	}
+
+	// Context not found - the file might not have been parsed yet
+	// Try to parse it now
+	modules := b.resolver.GetModules()
+	if _, exists := modules[filePath]; !exists {
+		// File not yet parsed - parse it now
+		module, err := b.resolver.GetModule(filePath)
+		if err != nil {
+			// Failed to parse, can't find context
+			return ""
+		}
+
+		// Now that we've parsed the file, build nodes from it
+		// We need to build components first (phase 1), then state nodes (phase 2)
+		if module != nil {
+			b.buildComponentNodes(module)
+			b.buildStateNodes(module)
+
+			// Search again in the newly built state nodes
+			for id, stateNode := range b.graph.StateNodes {
+				if stateNode.Name == contextName && stateNode.Type == StateTypeContext && stateNode.Location.FilePath == filePath {
+					return id
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+// findContextID is a helper that searches for a context by name
+// First in the current file, then in imports
+func (b *Builder) findContextID(contextName, currentFile string) string {
+	// First search in the same file
+	for id, stateNode := range b.graph.StateNodes {
+		if stateNode.Name == contextName && stateNode.Type == StateTypeContext && stateNode.Location.FilePath == currentFile {
+			return id
+		}
+	}
+
+	// Not found locally, search imports
+	return b.findContextInImports(contextName, currentFile)
+}
+
 func (b *Builder) handleUseStateWithPattern(useStateNode *parser.Node, pattern *parser.Node, component *ComponentNode, filePath string) {
 	// Extract state variable name from pattern: [count, setCount]
 
@@ -1198,23 +1300,27 @@ func (b *Builder) handleUseContextWithPattern(useContextNode *parser.Node, patte
 		contextName = contextArg.Text()
 	}
 
-	// For now, we'll create a context state node if it doesn't exist
-	// Later, we'll link this to the actual createContext definition
-	contextStateID := GenerateStateID("", contextName, filePath, line+1)
+	// Try to find context via imports first (cross-file resolution)
+	contextStateID := b.findContextID(contextName, filePath)
 
-	// Check if context state node already exists
-	if _, exists := b.graph.StateNodes[contextStateID]; !exists {
-		// Create a placeholder context state node
-		// This will be replaced/updated when we find the actual createContext call
-		contextStateNode := &StateNode{
-			ID:       contextStateID,
-			Name:     contextName,
-			Type:     StateTypeContext,
-			DataType: DataTypeUnknown, // Will be inferred from createContext or Provider value
-			Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: component.Name},
-			Mutable:  false, // Context values are read-only in consumers
+	// If not found, create a placeholder in the current file
+	if contextStateID == "" {
+		contextStateID = GenerateStateID("", contextName, filePath, line+1)
+
+		// Check if context state node already exists
+		if _, exists := b.graph.StateNodes[contextStateID]; !exists {
+			// Create a placeholder context state node
+			// This will be replaced/updated when we find the actual createContext call
+			contextStateNode := &StateNode{
+				ID:       contextStateID,
+				Name:     contextName,
+				Type:     StateTypeContext,
+				DataType: DataTypeUnknown, // Will be inferred from createContext or Provider value
+				Location: Location{FilePath: filePath, Line: line + 1, Column: col, Component: component.Name},
+				Mutable:  false, // Context values are read-only in consumers
+			}
+			b.graph.AddStateNode(contextStateNode)
 		}
-		b.graph.AddStateNode(contextStateNode)
 	}
 
 	// Add "consumes" edge from component to context
@@ -1309,16 +1415,21 @@ func (b *Builder) handleContextProvider(jsxNode *parser.Node, component *Compone
 		return
 	}
 
-	// Find the context state node
-	var contextStateID string
-	for id, stateNode := range b.graph.StateNodes {
-		if stateNode.Name == contextName && stateNode.Type == StateTypeContext {
-			contextStateID = id
-			break
+	// Try to find context via imports first (cross-file resolution)
+	contextStateID := b.findContextID(contextName, filePath)
+
+	// If not found via imports, fallback to global name search
+	// (This handles cases where context is used before being imported, or legacy code)
+	if contextStateID == "" {
+		for id, stateNode := range b.graph.StateNodes {
+			if stateNode.Name == contextName && stateNode.Type == StateTypeContext {
+				contextStateID = id
+				break
+			}
 		}
 	}
 
-	// If context doesn't exist yet, create a placeholder
+	// If still not found, create a placeholder
 	if contextStateID == "" {
 		contextStateID = GenerateStateID("", contextName, filePath, line+1)
 		contextStateNode := &StateNode{
