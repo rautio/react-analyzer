@@ -575,17 +575,39 @@ export class GraphWebview {
             const violationsByNode = {};
             if (data.issues) {
                 data.issues.forEach(issue => {
-                    // Match violations to nodes by file path
+                    // Match violations to nodes by file path AND line number
                     Object.entries(data.graph.componentNodes || {}).forEach(([id, node]) => {
-                        if (node.location.filePath === issue.filePath) {
-                            if (!violationsByNode[id]) {
-                                violationsByNode[id] = [];
+                        // Check if violation is within the component's scope
+                        // Match if same file and line is at or after component definition
+                        if (node.location.filePath === issue.filePath &&
+                            issue.line >= node.location.line) {
+                            // For components, only add if no children or issue is before first child
+                            let belongsToThisNode = true;
+
+                            // Check if this issue actually belongs to a child component
+                            if (node.children && node.children.length > 0) {
+                                const childNodes = node.children.map(childId => data.graph.componentNodes[childId]).filter(c => c);
+                                const isInChild = childNodes.some(child =>
+                                    child.location.filePath === issue.filePath &&
+                                    issue.line >= child.location.line
+                                );
+                                if (isInChild) {
+                                    belongsToThisNode = false;
+                                }
                             }
-                            violationsByNode[id].push(issue);
+
+                            if (belongsToThisNode) {
+                                if (!violationsByNode[id]) {
+                                    violationsByNode[id] = [];
+                                }
+                                violationsByNode[id].push(issue);
+                            }
                         }
                     });
                     Object.entries(data.graph.stateNodes || {}).forEach(([id, node]) => {
-                        if (node.location.filePath === issue.filePath) {
+                        // For state nodes, match exact line number
+                        if (node.location.filePath === issue.filePath &&
+                            node.location.line === issue.line) {
                             if (!violationsByNode[id]) {
                                 violationsByNode[id] = [];
                             }
