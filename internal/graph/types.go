@@ -88,14 +88,17 @@ const (
 
 // Edge represents a directed relationship in the graph
 type Edge struct {
-	ID           string   `json:"id"`
-	SourceID     string   `json:"sourceId"` // ID of source node
-	TargetID     string   `json:"targetId"` // ID of target node
-	Type         EdgeType `json:"type"`
-	Weight       float64  `json:"weight"`       // For future use (e.g., render frequency)
-	PropName     string   `json:"propName"`     // For passes edges
-	PropDataType DataType `json:"propDataType"` // Data type of prop (for passes edges)
-	Location     Location `json:"location"`
+	ID                string   `json:"id"`
+	SourceID          string   `json:"sourceId"` // ID of source node
+	TargetID          string   `json:"targetId"` // ID of target node
+	Type              EdgeType `json:"type"`
+	Weight            float64  `json:"weight"`            // For future use (e.g., render frequency)
+	PropName          string   `json:"propName"`          // For passes edges
+	PropDataType      DataType `json:"propDataType"`      // Data type of prop (for passes edges)
+	IsStable          bool     `json:"isStable"`          // Is the passed prop value stable? (useMemo/useCallback/constant)
+	StabilityReason   string   `json:"stabilityReason"`   // Why stable/unstable: "inline", "useMemo", "useCallback", "constant", "unknown"
+	BreaksMemoization bool     `json:"breaksMemoization"` // Does this edge break the target's memoization?
+	Location          Location `json:"location"`
 }
 
 // Graph represents the complete state dependency graph

@@ -52,9 +52,11 @@ export class GraphWebview {
         const configuredPath = vscode.workspace.getConfiguration('reactAnalyzer').get<string>('cliPath');
         if (configuredPath && configuredPath.length > 0) {
             this._cliPath = configuredPath;
+            console.log('Using configured CLI path:', this._cliPath);
         } else {
             // Use bundled binary from parent directory during development
             this._cliPath = path.join(path.dirname(extensionUri.fsPath), 'react-analyzer');
+            console.log('Using default CLI path:', this._cliPath);
         }
 
         // Set the webview's initial html content
@@ -501,11 +503,38 @@ export class GraphWebview {
                         }
                     },
                     {
-                        selector: 'edge.unstable-prop',
+                        selector: 'edge.breaks-memo',
                         style: {
-                            'line-color': '#ef4444',
-                            'target-arrow-color': '#ef4444',
+                            'line-color': '#dc2626',
+                            'target-arrow-color': '#dc2626',
+                            'line-style': 'solid',
+                            'width': 4
+                        }
+                    },
+                    {
+                        selector: 'edge.unstable',
+                        style: {
+                            'line-color': '#ea580c',
+                            'target-arrow-color': '#ea580c',
                             'line-style': 'dashed',
+                            'width': 3
+                        }
+                    },
+                    {
+                        selector: 'edge.stable-optimized',
+                        style: {
+                            'line-color': '#16a34a',
+                            'target-arrow-color': '#16a34a',
+                            'line-style': 'solid',
+                            'width': 3
+                        }
+                    },
+                    {
+                        selector: 'edge.stable-primitive',
+                        style: {
+                            'line-color': '#64748b',
+                            'target-arrow-color': '#64748b',
+                            'line-style': 'solid',
                             'width': 2.5
                         }
                     }
@@ -658,21 +687,55 @@ export class GraphWebview {
             // Transform edges
             (graph.edges || []).forEach(edge => {
                 const classes = [];
+                let label = edge.propName || '';
 
-                // Mark unstable props
-                if (edge.propDataType === 'object' ||
-                    edge.propDataType === 'array' ||
-                    edge.propDataType === 'function') {
-                    classes.push('unstable-prop');
+                // Use stability data from backend to determine edge styling
+                if (edge.type === 'passes' && edge.propName) {
+                    console.log('Processing passes edge:', edge.propName, 'isStable:', edge.isStable, 'breaksMemo:', edge.breaksMemoization, 'reason:', edge.stabilityReason);
+
+                    // Determine class based on stability
+                    if (edge.breaksMemoization) {
+                        // Red: Unstable prop breaking React.memo
+                        classes.push('breaks-memo');
+                        label = label + ' ⚠';
+                        console.log('  -> Applied class: breaks-memo (RED)');
+                    } else if (edge.isStable === false) {
+                        // Orange: Unstable prop (not breaking memo)
+                        classes.push('unstable');
+                        console.log('  -> Applied class: unstable (ORANGE)');
+                    } else if (edge.isStable === true) {
+                        // Check reason for different stable types
+                        if (edge.stabilityReason === 'useMemo' || edge.stabilityReason === 'useCallback') {
+                            // Green: Explicitly optimized
+                            classes.push('stable-optimized');
+                            console.log('  -> Applied class: stable-optimized (GREEN)');
+                        } else if (edge.stabilityReason === 'primitive') {
+                            // Gray: Primitive (inherently stable)
+                            classes.push('stable-primitive');
+                            console.log('  -> Applied class: stable-primitive (GRAY)');
+                        } else if (edge.stabilityReason === 'identifier') {
+                            // Default: identifier could be stable
+                            classes.push('stable-primitive');
+                            console.log('  -> Applied class: stable-primitive (GRAY)');
+                        }
+                    }
+
+                    // Add data type to label if present
+                    if (edge.propDataType && edge.propDataType !== 'unknown') {
+                        label = label + ': ' + edge.propDataType;
+                    }
                 }
 
                 edges.push({
                     data: {
                         source: edge.sourceId,
                         target: edge.targetId,
-                        label: edge.propName || '',
+                        label: label,
                         dataType: edge.propDataType || '',
-                        edgeType: edge.type
+                        edgeType: edge.type,
+                        isStable: edge.isStable,
+                        stabilityReason: edge.stabilityReason,
+                        breaksMemoization: edge.breaksMemoization
                     },
                     classes: classes.join(' ')
                 });

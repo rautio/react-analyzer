@@ -391,16 +391,26 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 							// Infer prop data type from the value node
 							propDataType := b.inferPropDataType(valueNode)
 
+							// Determine prop stability
+							isStable := b.isStableValue(valueNode)
+							stabilityReason := b.getStabilityReason(valueNode)
+
+							// Check if this breaks child's memoization
+							breaksMemo := childComp.IsMemoized && !isStable
+
 							// Create "passes" edge (include propName in ID to allow multiple props)
 							line, col := child.StartPoint()
 							edge := Edge{
-								ID:           GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
-								SourceID:     parentComp.ID,
-								TargetID:     childComp.ID,
-								Type:         EdgeTypePasses,
-								PropName:     propName,
-								PropDataType: propDataType,
-								Location:     Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+								ID:                GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
+								SourceID:          parentComp.ID,
+								TargetID:          childComp.ID,
+								Type:              EdgeTypePasses,
+								PropName:          propName,
+								PropDataType:      propDataType,
+								IsStable:          isStable,
+								StabilityReason:   stabilityReason,
+								BreaksMemoization: breaksMemo,
+								Location:          Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
 							}
 							b.graph.AddEdge(edge)
 						}
@@ -421,16 +431,26 @@ func (b *Builder) processJSXElement(jsxNode *parser.Node, parentComp *ComponentN
 								// Infer prop data type from the value node
 								propDataType := b.inferPropDataType(valueNode)
 
+								// Determine prop stability
+								isStable := b.isStableValue(valueNode)
+								stabilityReason := b.getStabilityReason(valueNode)
+
+								// Check if this breaks child's memoization
+								breaksMemo := childComp.IsMemoized && !isStable
+
 								// Create "passes" edge with the property name
 								line, col := child.StartPoint()
 								edge := Edge{
-									ID:           GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
-									SourceID:     parentComp.ID,
-									TargetID:     childComp.ID,
-									Type:         EdgeTypePasses,
-									PropName:     propName,
-									PropDataType: propDataType,
-									Location:     Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+									ID:                GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, propName),
+									SourceID:          parentComp.ID,
+									TargetID:          childComp.ID,
+									Type:              EdgeTypePasses,
+									PropName:          propName,
+									PropDataType:      propDataType,
+									IsStable:          isStable,
+									StabilityReason:   stabilityReason,
+									BreaksMemoization: breaksMemo,
+									Location:          Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
 								}
 								b.graph.AddEdge(edge)
 							}
@@ -590,15 +610,20 @@ func (b *Builder) handleSpreadAttribute(spreadNode *parser.Node, parentComp *Com
 			*propsPassedToChild = append(*propsPassedToChild, childProp.Name)
 
 			// Create edge for this prop
+			// Note: For spread props, we can't determine stability without more analysis
+			// Mark as potentially stable (conservative assumption)
 			line, col := spreadNode.StartPoint()
 			edge := Edge{
-				ID:           GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, childProp.Name),
-				SourceID:     parentComp.ID,
-				TargetID:     childComp.ID,
-				Type:         EdgeTypePasses,
-				PropName:     childProp.Name,
-				PropDataType: childProp.Type, // Use the child prop's type since we're spreading
-				Location:     Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+				ID:                GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, childProp.Name),
+				SourceID:          parentComp.ID,
+				TargetID:          childComp.ID,
+				Type:              EdgeTypePasses,
+				PropName:          childProp.Name,
+				PropDataType:      childProp.Type, // Use the child prop's type since we're spreading
+				IsStable:          true,           // Conservative: assume spread props are stable
+				StabilityReason:   "spread",
+				BreaksMemoization: false,
+				Location:          Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
 			}
 			b.graph.AddEdge(edge)
 		}
@@ -614,15 +639,20 @@ func (b *Builder) handleSpreadAttribute(spreadNode *parser.Node, parentComp *Com
 			*propsPassedToChild = append(*propsPassedToChild, childProp.Name)
 
 			// Create edge for this prop
+			// Note: For spread props, we can't determine stability without more analysis
+			// Mark as potentially stable (conservative assumption)
 			line, col := spreadNode.StartPoint()
 			edge := Edge{
-				ID:           GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, childProp.Name),
-				SourceID:     parentComp.ID,
-				TargetID:     childComp.ID,
-				Type:         EdgeTypePasses,
-				PropName:     childProp.Name,
-				PropDataType: childProp.Type, // Use the child prop's type since we're spreading
-				Location:     Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
+				ID:                GenerateEdgeIDWithProp(EdgeTypePasses, parentComp.ID, childComp.ID, childProp.Name),
+				SourceID:          parentComp.ID,
+				TargetID:          childComp.ID,
+				Type:              EdgeTypePasses,
+				PropName:          childProp.Name,
+				PropDataType:      childProp.Type, // Use the child prop's type since we're spreading
+				IsStable:          true,           // Conservative: assume spread props are stable
+				StabilityReason:   "spread",
+				BreaksMemoization: false,
+				Location:          Location{FilePath: filePath, Line: line + 1, Column: col, Component: parentComp.Name},
 			}
 			b.graph.AddEdge(edge)
 		}
@@ -773,6 +803,109 @@ func (b *Builder) inferPropDataType(valueNode *parser.Node) DataType {
 		return DataTypeUnknown
 	default:
 		return DataTypeUnknown
+	}
+}
+
+// isStableValue determines if a prop value is stable (won't cause unnecessary re-renders)
+func (b *Builder) isStableValue(valueNode *parser.Node) bool {
+	if valueNode == nil {
+		return false
+	}
+
+	// Handle jsx_expression wrapper
+	if valueNode.Type() == "jsx_expression" {
+		for _, child := range valueNode.Children() {
+			if child.Type() == "{" || child.Type() == "}" {
+				continue
+			}
+			return b.isStableValue(child)
+		}
+		return false
+	}
+
+	// Inline objects, arrays, and functions are UNSTABLE (new reference every render)
+	if valueNode.Type() == "object" ||
+		valueNode.Type() == "array" ||
+		valueNode.Type() == "arrow_function" ||
+		valueNode.Type() == "function" ||
+		valueNode.Type() == "function_expression" {
+		return false
+	}
+
+	// Check if it's a call to useMemo or useCallback
+	if valueNode.Type() == "call_expression" {
+		callee := valueNode.ChildByFieldName("function")
+		if callee != nil {
+			calleeName := callee.Text()
+			if calleeName == "useMemo" || calleeName == "useCallback" {
+				return true
+			}
+		}
+		// Other function calls are unknown stability
+		return false
+	}
+
+	// Primitives (strings, numbers, booleans) are inherently stable
+	if valueNode.Type() == "true" || valueNode.Type() == "false" ||
+		valueNode.Type() == "number" || valueNode.Type() == "string" ||
+		valueNode.Type() == "template_string" {
+		return true
+	}
+
+	// Identifiers could be stable or unstable, we can't know without more context
+	// Conservatively mark as potentially stable (could be a constant)
+	if valueNode.Type() == "identifier" {
+		return true
+	}
+
+	// Unknown - conservatively mark as potentially unstable
+	return false
+}
+
+// getStabilityReason returns a human-readable reason for stability/instability
+func (b *Builder) getStabilityReason(valueNode *parser.Node) string {
+	if valueNode == nil {
+		return "unknown"
+	}
+
+	// Handle jsx_expression wrapper
+	if valueNode.Type() == "jsx_expression" {
+		for _, child := range valueNode.Children() {
+			if child.Type() == "{" || child.Type() == "}" {
+				continue
+			}
+			return b.getStabilityReason(child)
+		}
+		return "unknown"
+	}
+
+	switch valueNode.Type() {
+	case "object":
+		return "inline-object"
+	case "array":
+		return "inline-array"
+	case "arrow_function", "function", "function_expression":
+		return "inline-function"
+	case "call_expression":
+		callee := valueNode.ChildByFieldName("function")
+		if callee != nil {
+			calleeName := callee.Text()
+			if calleeName == "useMemo" {
+				return "useMemo"
+			}
+			if calleeName == "useCallback" {
+				return "useCallback"
+			}
+		}
+		return "function-call"
+	case "true", "false", "number", "string", "template_string":
+		return "primitive"
+	case "identifier":
+		return "identifier"
+	case "member_expression":
+		return "member-expression"
+	default:
+		return "unknown"
 	}
 }
 
