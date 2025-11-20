@@ -374,6 +374,8 @@ export class GraphWebview {
             <option value="LR" selected>Left→Right</option>
             <option value="TB">Top→Down</option>
         </select>
+        <button id="zoom-in" title="Zoom In">+</button>
+        <button id="zoom-out" title="Zoom Out">−</button>
         <button id="fit-screen" title="Fit to Screen">Fit</button>
         <button id="reset-zoom" title="Reset View">Reset</button>
     </div>
@@ -1090,6 +1092,20 @@ export class GraphWebview {
 
         // Event handlers
         document.getElementById('layout-direction').addEventListener('change', runLayout);
+        document.getElementById('zoom-in').addEventListener('click', () => {
+            const zoom = cy.zoom();
+            cy.zoom({
+                level: zoom * 1.2,
+                renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 }
+            });
+        });
+        document.getElementById('zoom-out').addEventListener('click', () => {
+            const zoom = cy.zoom();
+            cy.zoom({
+                level: zoom / 1.2,
+                renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 }
+            });
+        });
         document.getElementById('fit-screen').addEventListener('click', () => cy.fit(50));
         document.getElementById('reset-zoom').addEventListener('click', () => cy.reset());
         document.getElementById('close-detail').addEventListener('click', hideDetailPanel);
