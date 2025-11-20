@@ -107,12 +107,12 @@ export class GraphWebview {
 
     private async getMermaidDiagram(filePath: string): Promise<string> {
         return new Promise((resolve, reject) => {
-            // Analyze the directory containing the file (like analyzeFile does)
-            // This enables cross-file analysis and proper parsing
-            const dirPath = path.dirname(filePath);
-            const args = ['-mermaid', dirPath];
+            // For large directories, just analyze the single file to avoid Mermaid size limits
+            // This may cause some cross-file references to be missing, but prevents "text size exceeded" errors
+            const args = ['-mermaid', filePath];
 
             console.log(`Running: ${this._cliPath} ${args.join(' ')}`);
+            console.log(`Note: Analyzing single file to avoid Mermaid size limits`);
 
             const process = child_process.spawn(this._cliPath, args);
 
