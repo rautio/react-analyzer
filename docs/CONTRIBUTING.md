@@ -381,6 +381,141 @@ go build cmd/react-analyzer/main.go
 
 ---
 
+### Step 8: Update VSCode Extension (Optional)
+
+If your rule should display fix suggestions in the graph view, update `vscode-extension/src/views/GraphWebview.ts`:
+
+```typescript
+function getRuleInfo(ruleName) {
+    const ruleInfoMap = {
+        'no-missing-keys': {
+            suggestion: 'Add a unique <code>key</code> prop to each item in the list. Use a stable identifier like <code>item.id</code>, not array index.',
+            docsUrl: 'https://github.com/rautio/react-analyzer/blob/main/docs/rules/no-missing-keys.md'
+        },
+        // ... other rules
+    };
+    return ruleInfoMap[ruleName] || { suggestion: null, docsUrl: null };
+}
+```
+
+---
+
+## New Rule Checklist
+
+Use this checklist when adding a new rule to ensure completeness:
+
+### Required Files
+
+- [ ] **Rule Implementation** (`internal/rules/your_rule_name.go`)
+  - [ ] Implements `Name() string` method
+  - [ ] Implements `Check(ast, resolver) []Issue` method
+  - [ ] Implements `CheckGraph(graph) []Issue` if graph-based
+  - [ ] Has descriptive comments explaining what it detects
+  - [ ] Error messages are clear and actionable
+
+- [ ] **Unit Tests** (`internal/rules/your_rule_name_test.go`)
+  - [ ] Tests for true positives (should detect violation)
+  - [ ] Tests for true negatives (should not detect)
+  - [ ] Tests for edge cases
+  - [ ] Minimum 3-5 test cases
+  - [ ] All tests pass with `go test ./internal/rules/`
+
+- [ ] **Test Fixtures** (`test/fixtures/your-rule-name/`)
+  - [ ] At least one positive example (triggers rule)
+  - [ ] At least one negative example (doesn't trigger rule)
+  - [ ] Files are properly formatted and runnable
+  - [ ] Include comments explaining what should be detected
+
+- [ ] **Documentation** (`docs/rules/your-rule-name.md`)
+  - [ ] Rule name and brief description
+  - [ ] "Why This Matters" section explaining the problem
+  - [ ] Minimum 2 "❌ Incorrect Code" examples
+  - [ ] Minimum 2 "✅ Correct Code" examples with explanations
+  - [ ] Configuration options (if any)
+  - [ ] "When to Disable" section
+  - [ ] Related rules section
+  - [ ] References to React docs or articles
+
+### Integration
+
+- [ ] **Registry** (`internal/rules/registry.go`)
+  - [ ] Rule added to `NewRegistry()` function
+  - [ ] Rule appears in correct order (group with similar rules)
+
+- [ ] **VSCode Extension** (`vscode-extension/src/views/GraphWebview.ts`)
+  - [ ] Added to `getRuleInfo()` function with suggestion
+  - [ ] Documentation URL points to correct GitHub path
+  - [ ] Suggestion is concise (1-2 sentences max)
+
+### Testing
+
+- [ ] **Unit Tests**
+  - [ ] `go test ./internal/rules/ -run TestYourRule` passes
+  - [ ] Tests cover both positive and negative cases
+  - [ ] No false positives or false negatives
+
+- [ ] **Fixture Tests**
+  - [ ] `./main test/fixtures/your-rule-name/` runs successfully
+  - [ ] Detects expected violations
+  - [ ] Doesn't produce unexpected violations
+
+- [ ] **Real-World Testing**
+  - [ ] Tested on at least one real React codebase
+  - [ ] Verified no crashes or panics
+  - [ ] Performance is acceptable (< 1s for small files)
+
+### Documentation
+
+- [ ] **Rule Documentation**
+  - [ ] Follows template from existing rules
+  - [ ] Examples are clear and realistic
+  - [ ] Code examples are properly formatted
+  - [ ] Grammar and spelling checked
+
+- [ ] **Contributing Guide**
+  - [ ] No updates needed (checklist covers everything)
+
+- [ ] **CURRENT_STATE.md** (optional)
+  - [ ] Update if rule adds new capability
+  - [ ] Add to "Implemented Rules" section
+
+### Code Quality
+
+- [ ] **Go Standards**
+  - [ ] Code formatted with `gofmt`
+  - [ ] No linter warnings
+  - [ ] Exported types have doc comments
+  - [ ] Error messages follow project style (lowercase, no period)
+
+- [ ] **Performance**
+  - [ ] No obvious performance issues
+  - [ ] Avoids redundant tree walking
+  - [ ] Doesn't hold unnecessary references
+
+### Validation Example
+
+Here's a complete checklist for a hypothetical rule:
+
+```
+Rule: no-missing-keys
+
+✅ internal/rules/no_missing_keys.go (185 lines)
+✅ internal/rules/no_missing_keys_test.go (5 test cases)
+✅ test/fixtures/missing-keys/HasKey.tsx
+✅ test/fixtures/missing-keys/MissingKey.tsx
+✅ test/fixtures/missing-keys/IndexAsKey.tsx
+✅ docs/rules/no-missing-keys.md
+✅ Registry updated (internal/rules/registry.go:318)
+✅ VSCode extension updated (GraphWebview.ts:1022-1025)
+✅ All tests pass (go test ./...)
+✅ Tested on test/fixtures/ directory
+✅ Tested on real React app (create-react-app)
+✅ Code formatted (gofmt -w .)
+✅ Documentation reviewed
+```
+
+---
+
 ## Graph-Based Rules
 
 For rules that need cross-component analysis:

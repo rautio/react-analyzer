@@ -72,6 +72,9 @@ export class GraphWebview {
                     case 'jumpToSource':
                         await this.jumpToSource(message.file, message.line);
                         break;
+                    case 'openExternal':
+                        await vscode.env.openExternal(vscode.Uri.parse(message.url));
+                        break;
                     case 'error':
                         vscode.window.showErrorMessage(message.message);
                         break;
@@ -355,6 +358,16 @@ export class GraphWebview {
             font-size: 10px;
             color: var(--vscode-descriptionForeground);
             margin-top: 4px;
+        }
+
+        .docs-link {
+            display: inline-block;
+            transition: opacity 0.2s;
+        }
+
+        .docs-link:hover {
+            opacity: 0.8;
+            text-decoration: underline !important;
         }
 
         .loading {
@@ -1013,6 +1026,43 @@ export class GraphWebview {
             });
         }
 
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getRuleInfo(ruleName) {
+            const ruleInfoMap = {
+                'no-object-deps': {
+                    suggestion: 'Use <code>useMemo</code> to memoize the object/array, or extract it to a module-level constant if it never changes.',
+                    docsUrl: 'https://github.com/rautio/react-analyzer/blob/main/docs/rules/no-object-deps.md'
+                },
+                'no-stale-state': {
+                    suggestion: 'Use the functional form of setState: <code>setState(prev => prev + 1)</code> instead of <code>setState(count + 1)</code>.',
+                    docsUrl: 'https://github.com/rautio/react-analyzer/blob/main/docs/rules/no-stale-state.md'
+                },
+                'unstable-props-to-memo': {
+                    suggestion: 'Wrap the prop value with <code>useMemo</code> or <code>useCallback</code> to maintain a stable reference across renders.',
+                    docsUrl: 'https://github.com/rautio/react-analyzer/blob/main/docs/rules/unstable-props-to-memo.md'
+                },
+                'no-inline-props': {
+                    suggestion: 'Extract inline objects/arrays/functions to variables outside JSX. For dynamic values, use <code>useMemo</code> or <code>useCallback</code>.',
+                    docsUrl: 'https://github.com/rautio/react-analyzer/blob/main/docs/rules/no-inline-props.md'
+                },
+                'no-derived-state': {
+                    suggestion: 'Remove the derived state and compute the value directly during render, or use <code>useMemo</code> if the computation is expensive.',
+                    docsUrl: 'https://github.com/rautio/react-analyzer/blob/main/docs/rules/no-derived-state.md'
+                },
+                'deep-prop-drilling': {
+                    suggestion: 'Consider using React Context, component composition, or state management libraries like Redux/Zustand to avoid passing props through multiple layers.',
+                    docsUrl: 'https://github.com/rautio/react-analyzer/blob/main/docs/rules/deep-prop-drilling.md'
+                }
+            };
+
+            return ruleInfoMap[ruleName] || { suggestion: null, docsUrl: null };
+        }
+
         function showNodeDetails(node) {
             const data = node.data();
             const panel = document.getElementById('detail-panel');
@@ -1047,10 +1097,27 @@ export class GraphWebview {
                 html += '<h4 style="margin: 0 0 8px 0; color: var(--vscode-errorForeground);">⚠ Issues (' + data.violations.length + ')</h4>';
 
                 data.violations.forEach(v => {
+                    const ruleInfo = getRuleInfo(v.rule);
                     html += '<div class="violation-item">';
-                    html += '<div class="rule">' + v.rule + '</div>';
-                    html += '<div class="message">' + v.message + '</div>';
+                    html += '<div class="rule">' + escapeHtml(v.rule) + '</div>';
+                    html += '<div class="message">' + escapeHtml(v.message) + '</div>';
                     html += '<div class="location">Line ' + v.line + '</div>';
+
+                    // Add fix suggestion
+                    if (ruleInfo.suggestion) {
+                        html += '<div style="margin-top: 8px; padding: 8px; background: var(--vscode-textBlockQuote-background); border-left: 3px solid var(--vscode-textLink-foreground); font-size: 11px; line-height: 1.5;">';
+                        html += '<strong>💡 How to fix:</strong><br>';
+                        html += ruleInfo.suggestion;
+                        html += '</div>';
+                    }
+
+                    // Add documentation link
+                    if (ruleInfo.docsUrl) {
+                        html += '<div style="margin-top: 6px;">';
+                        html += '<a href="#" class="docs-link" data-url="' + escapeHtml(ruleInfo.docsUrl) + '" style="font-size: 11px; color: var(--vscode-textLink-foreground); text-decoration: none; cursor: pointer;">📖 Learn more about this rule <span style="font-size: 10px;">↗</span></a>';
+                        html += '</div>';
+                    }
+
                     html += '</div>';
                 });
 
@@ -1061,6 +1128,19 @@ export class GraphWebview {
 
             content.innerHTML = html;
             panel.classList.add('visible');
+
+            // Add event listeners for documentation links
+            const docsLinks = content.querySelectorAll('.docs-link');
+            docsLinks.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation(); // Prevent triggering parent click handlers
+                    const url = link.getAttribute('data-url');
+                    if (url) {
+                        openDocsLink(url);
+                    }
+                });
+            });
 
             // Add click-to-jump functionality
             if (data.file && data.line) {
@@ -1291,6 +1371,13 @@ export class GraphWebview {
 
         function hideDetailPanel() {
             document.getElementById('detail-panel').classList.remove('visible');
+        }
+
+        function openDocsLink(url) {
+            vscode.postMessage({
+                type: 'openExternal',
+                url: url
+            });
         }
 
         // Event handlers
