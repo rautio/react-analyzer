@@ -205,6 +205,7 @@ func Run(path string, opts *Options) int {
 
 	// Process results
 	var allIssues []rules.Issue
+	filesWithIssues := make(map[string]struct{}) // Track unique files with issues
 	for _, result := range fileResults {
 		if result.Error != nil {
 			// Print error but continue with other files (not in JSON mode)
@@ -216,7 +217,7 @@ func Run(path string, opts *Options) int {
 
 		stats.FilesAnalyzed++
 		if len(result.Issues) > 0 {
-			stats.FilesWithIssues++
+			filesWithIssues[result.FilePath] = struct{}{}
 			allIssues = append(allIssues, result.Issues...)
 		}
 	}
@@ -258,12 +259,10 @@ func Run(path string, opts *Options) int {
 
 			if len(graphIssues) > 0 {
 				allIssues = append(allIssues, graphIssues...)
-				// Update stats for graph-based issues
-				graphFilesAffected := make(map[string]bool)
+				// Track files affected by graph issues (add to existing set)
 				for _, issue := range graphIssues {
-					graphFilesAffected[issue.FilePath] = true
+					filesWithIssues[issue.FilePath] = struct{}{}
 				}
-				stats.FilesWithIssues += len(graphFilesAffected)
 			}
 
 			if opts.Verbose && !opts.JSON {
@@ -304,6 +303,7 @@ func Run(path string, opts *Options) int {
 	}
 
 	// Collect final stats
+	stats.FilesWithIssues = len(filesWithIssues) // Count unique files with issues
 	stats.FilesClean = stats.FilesAnalyzed - stats.FilesWithIssues
 	stats.TotalIssues = len(allIssues)
 	stats.Duration = time.Since(startTime)
