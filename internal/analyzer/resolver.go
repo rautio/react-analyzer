@@ -12,11 +12,10 @@ import (
 
 // ModuleResolver resolves import paths and manages parsed modules
 type ModuleResolver struct {
-	modules      map[string]*Module // Cache of parsed modules (key: absolute path)
-	mu           sync.RWMutex       // Protects modules map for concurrent access
-	treeSitterMu sync.Mutex         // GLOBAL lock - protects ALL tree-sitter operations (parsing + AST walking). Tree-sitter C library is not thread-safe.
-	baseDir      string             // Project root directory
-	parser       *parser.TreeSitterParser
+	modules      map[string]*Module           // Cache of parsed modules (key: absolute path)
+	mu           sync.RWMutex                 // Protects modules map for concurrent access
+	parserPool   *sync.Pool                   // Pool of parser instances for concurrent parsing
+	baseDir      string                       // Project root directory
 	aliasCache   map[string]map[string]string // Per-directory alias cache: dir -> aliases
 	aliasCacheMu sync.RWMutex                 // Protects aliasCache for concurrent access
 }
@@ -28,22 +27,32 @@ func NewModuleResolver(baseDir string) (*ModuleResolver, error) {
 		return nil, err
 	}
 
-	p, err := parser.NewParser()
-	if err != nil {
-		return nil, err
+	// Create a pool of parsers for concurrent parsing
+	// Each parser instance is safe to use from a single goroutine
+	parserPool := &sync.Pool{
+		New: func() interface{} {
+			p, err := parser.NewParser()
+			if err != nil {
+				// This should rarely happen; log or handle appropriately
+				panic(fmt.Sprintf("failed to create parser in pool: %v", err))
+			}
+			return p
+		},
 	}
 
 	return &ModuleResolver{
 		modules:    make(map[string]*Module),
 		baseDir:    absBase,
-		parser:     p,
+		parserPool: parserPool,
 		aliasCache: make(map[string]map[string]string),
 	}, nil
 }
 
 // Close cleans up the resolver resources
 func (r *ModuleResolver) Close() error {
-	return r.parser.Close()
+	// Parser cleanup is handled by GC in go-tree-sitter
+	// The pool will be garbage collected along with any parsers it holds
+	return nil
 }
 
 // getOrLoadAliasesForFile returns the path aliases for a given file
@@ -208,17 +217,17 @@ func (r *ModuleResolver) GetModule(filePath string) (*Module, error) {
 		return nil, fmt.Errorf("cannot read %s: %v", absPath, err)
 	}
 
-	// Acquire global tree-sitter lock for ALL operations (parsing + AST walking)
-	// The tree-sitter C library is not thread-safe, so we must serialize all operations
-	r.treeSitterMu.Lock()
-	defer r.treeSitterMu.Unlock()
+	// Get a parser from the pool for this parsing operation
+	// Each parser instance is safe to use from a single goroutine
+	p := r.parserPool.Get().(*parser.TreeSitterParser)
+	defer r.parserPool.Put(p)
 
-	ast, err := r.parser.ParseFile(absPath, content)
+	ast, err := p.ParseFile(absPath, content)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse %s: %v", absPath, err)
 	}
 
-	// Extract imports (walks AST)
+	// Extract imports (walks AST) - no lock needed, AST is read-only
 	imports := ExtractImports(ast)
 
 	// Create module
@@ -229,7 +238,7 @@ func (r *ModuleResolver) GetModule(filePath string) (*Module, error) {
 		Symbols:  make(map[string]*Symbol),
 	}
 
-	// Analyze symbols in this module (walks AST)
+	// Analyze symbols in this module (walks AST) - no lock needed, AST is read-only
 	AnalyzeSymbols(module)
 
 	// Cache it with write lock
@@ -274,13 +283,16 @@ func (r *ModuleResolver) GetPathAliasesWithSource() (map[string]string, string) 
 	return LoadPathAliasesWithPath(r.baseDir)
 }
 
-// LockTreeSitter acquires the global tree-sitter lock
-// Must be called before any AST operations outside of GetModule
+// LockTreeSitter is deprecated and no longer needed
+// AST operations are now safe to perform concurrently as ASTs are read-only after parsing
+// This method is kept for backward compatibility but does nothing
 func (r *ModuleResolver) LockTreeSitter() {
-	r.treeSitterMu.Lock()
+	// No-op: concurrent AST reads are safe
 }
 
-// UnlockTreeSitter releases the global tree-sitter lock
+// UnlockTreeSitter is deprecated and no longer needed
+// AST operations are now safe to perform concurrently as ASTs are read-only after parsing
+// This method is kept for backward compatibility but does nothing
 func (r *ModuleResolver) UnlockTreeSitter() {
-	r.treeSitterMu.Unlock()
+	// No-op: concurrent AST reads are safe
 }
