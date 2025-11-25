@@ -37,9 +37,11 @@ type AnalysisStats struct {
 	Duration        time.Duration
 
 	// Verbose-only stats
-	ParseDuration   time.Duration
-	AnalyzeDuration time.Duration
-	RuleStats       map[string]*RuleStats
+	ParseDuration     time.Duration // Total time spent parsing files
+	AnalyzeDuration   time.Duration // Total time spent running AST rules
+	GraphBuildTime    time.Duration // Time to build dependency graph
+	GraphAnalysisTime time.Duration // Time to run graph-based rules
+	RuleStats         map[string]*RuleStats
 }
 
 // RuleStats holds per-rule execution metrics
@@ -230,19 +232,30 @@ func Run(path string, opts *Options) int {
 				fmt.Printf("    - %s\n", path)
 			}
 		}
-		graphStart := time.Now()
+		graphBuildStart := time.Now()
 
 		// Build the graph from all parsed modules
 		builder := graph.NewBuilder(resolver)
 		var err error
 		depGraph, err = builder.Build()
+		graphBuildDuration := time.Since(graphBuildStart)
+		stats.GraphBuildTime = graphBuildDuration
+
 		if err != nil {
 			if !opts.JSON {
 				fmt.Fprintf(os.Stderr, "Warning: failed to build dependency graph: %v\n", err)
 			}
 		} else {
+			if opts.Verbose && !opts.JSON {
+				fmt.Printf("Graph built in %s\n", formatDuration(graphBuildDuration))
+			}
+
 			// Run graph-based rules
+			graphAnalysisStart := time.Now()
 			graphIssues := registry.RunGraph(depGraph)
+			graphAnalysisDuration := time.Since(graphAnalysisStart)
+			stats.GraphAnalysisTime = graphAnalysisDuration
+
 			if len(graphIssues) > 0 {
 				allIssues = append(allIssues, graphIssues...)
 				// Update stats for graph-based issues
@@ -254,7 +267,11 @@ func Run(path string, opts *Options) int {
 			}
 
 			if opts.Verbose && !opts.JSON {
-				fmt.Printf("Graph analysis completed in %s\n", formatDuration(time.Since(graphStart)))
+				totalGraphTime := graphBuildDuration + graphAnalysisDuration
+				fmt.Printf("Graph analysis completed in %s (build: %s, rules: %s)\n",
+					formatDuration(totalGraphTime),
+					formatDuration(graphBuildDuration),
+					formatDuration(graphAnalysisDuration))
 				fmt.Printf("  Components: %d\n", len(depGraph.ComponentNodes))
 				fmt.Printf("  State nodes: %d\n", len(depGraph.StateNodes))
 				fmt.Printf("  Edges: %d\n", len(depGraph.Edges))
@@ -536,31 +553,73 @@ func printTiming(stats *AnalysisStats, opts *Options) {
 
 // printDetailedStats prints detailed statistics (verbose mode)
 func printDetailedStats(stats *AnalysisStats, opts *Options) {
-	fmt.Println("\nPerformance Summary:")
-	fmt.Printf("  Time elapsed: %s (parse: %s, analyze: %s)\n",
-		formatDuration(stats.Duration),
-		formatDuration(stats.ParseDuration),
-		formatDuration(stats.AnalyzeDuration))
+	fmt.Println("\n" + strings.Repeat("=", 60))
+	fmt.Println("PERFORMANCE BREAKDOWN")
+	fmt.Println(strings.Repeat("=", 60))
 
+	// Overall timing
+	fmt.Printf("\n  Total time:        %s\n", formatDuration(stats.Duration))
+
+	// Phase breakdown with percentages
+	if stats.Duration > 0 {
+		parsePercent := (float64(stats.ParseDuration) / float64(stats.Duration)) * 100
+		analyzePercent := (float64(stats.AnalyzeDuration) / float64(stats.Duration)) * 100
+		graphBuildPercent := (float64(stats.GraphBuildTime) / float64(stats.Duration)) * 100
+		graphAnalysisPercent := (float64(stats.GraphAnalysisTime) / float64(stats.Duration)) * 100
+
+		fmt.Println("\nPhase Breakdown:")
+		fmt.Printf("  ├─ Parsing:        %s  (%5.1f%%)  [AST generation]\n",
+			formatDuration(stats.ParseDuration), parsePercent)
+		fmt.Printf("  ├─ AST Rules:      %s  (%5.1f%%)  [Running file-based rules]\n",
+			formatDuration(stats.AnalyzeDuration), analyzePercent)
+		fmt.Printf("  ├─ Graph Build:    %s  (%5.1f%%)  [Building dependency graph]\n",
+			formatDuration(stats.GraphBuildTime), graphBuildPercent)
+		fmt.Printf("  └─ Graph Rules:    %s  (%5.1f%%)  [Running graph-based rules]\n",
+			formatDuration(stats.GraphAnalysisTime), graphAnalysisPercent)
+
+		// Calculate overhead (time not accounted for in phases)
+		accountedTime := stats.ParseDuration + stats.AnalyzeDuration +
+			stats.GraphBuildTime + stats.GraphAnalysisTime
+		overhead := stats.Duration - accountedTime
+		if overhead > 0 {
+			overheadPercent := (float64(overhead) / float64(stats.Duration)) * 100
+			fmt.Printf("  \n  Overhead:          %s  (%5.1f%%)  [I/O, scheduling, etc.]\n",
+				formatDuration(overhead), overheadPercent)
+		}
+	}
+
+	// Per-file metrics
 	if stats.FilesAnalyzed > 0 {
+		avgParse := stats.ParseDuration / time.Duration(stats.FilesAnalyzed)
+		avgAnalyze := stats.AnalyzeDuration / time.Duration(stats.FilesAnalyzed)
+		avgTotal := stats.Duration / time.Duration(stats.FilesAnalyzed)
+
+		fmt.Println("\nPer-File Averages:")
+		fmt.Printf("  ├─ Parse time:     %s/file\n", formatDuration(avgParse))
+		fmt.Printf("  ├─ Analysis time:  %s/file\n", formatDuration(avgAnalyze))
+		fmt.Printf("  └─ Total time:     %s/file\n", formatDuration(avgTotal))
+
 		filesPerSec := float64(stats.FilesAnalyzed) / stats.Duration.Seconds()
-		fmt.Printf("  Throughput: %.0f files/sec\n", filesPerSec)
+		fmt.Printf("\n  Throughput:        %.1f files/sec\n", filesPerSec)
 	}
 
 	// Show per-rule stats if available
 	if len(stats.RuleStats) > 0 {
-		fmt.Println("\nRules executed:")
+		fmt.Println("\n" + strings.Repeat("-", 60))
+		fmt.Println("RULES EXECUTED:")
 		for _, ruleStats := range stats.RuleStats {
 			issueWord := "issue"
 			if ruleStats.IssuesFound != 1 {
 				issueWord = "issues"
 			}
-			fmt.Printf("  %s: %d %s\n",
-				ruleStats.Name,
+			fmt.Printf("  ├─ %-30s %d %s\n",
+				ruleStats.Name+":",
 				ruleStats.IssuesFound,
 				issueWord)
 		}
 	}
+
+	fmt.Println(strings.Repeat("=", 60))
 }
 
 // collectRuleStats collects per-rule statistics from issues
