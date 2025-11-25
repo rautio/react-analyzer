@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rautio/react-analyzer/internal/analyzer"
+	"github.com/rautio/react-analyzer/internal/parser"
 	"github.com/rautio/react-analyzer/internal/rules"
 )
 
@@ -101,11 +102,21 @@ func worker(
 ) {
 	defer wg.Done()
 
+	// Create a dedicated parser for this worker to avoid sync.Pool contention
+	// Each worker keeps its own parser instance for the lifetime of the worker
+	workerParser, err := parser.NewParser()
+	if err != nil {
+		// If we can't create a parser, process files without a dedicated parser
+		// (will fall back to the pool)
+		workerParser = nil
+	}
+
 	for job := range jobs {
-		issues, parseDuration, analyzeDuration, err := analyzeFile(
+		issues, parseDuration, analyzeDuration, err := analyzeFileWithParser(
 			job.FilePath,
 			registry,
 			resolver,
+			workerParser,
 			opts,
 		)
 

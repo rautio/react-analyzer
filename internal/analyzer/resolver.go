@@ -197,6 +197,18 @@ func (r *ModuleResolver) Resolve(fromFile string, importPath string) (string, er
 // GetModule returns a module, parsing it if necessary
 // Thread-safe: uses read lock for cache lookup, write lock for cache update
 func (r *ModuleResolver) GetModule(filePath string) (*Module, error) {
+	return r.getModuleWithParser(filePath, nil)
+}
+
+// GetModuleWithParser returns a module using a provided parser (avoids pool overhead)
+// If parser is nil, gets one from the pool
+// This is an optimization for worker pools that maintain their own parser instances
+func (r *ModuleResolver) GetModuleWithParser(filePath string, p *parser.TreeSitterParser) (*Module, error) {
+	return r.getModuleWithParser(filePath, p)
+}
+
+// getModuleWithParser is the internal implementation
+func (r *ModuleResolver) getModuleWithParser(filePath string, p *parser.TreeSitterParser) (*Module, error) {
 	// Normalize path
 	absPath, err := filepath.Abs(filePath)
 	if err != nil {
@@ -217,10 +229,16 @@ func (r *ModuleResolver) GetModule(filePath string) (*Module, error) {
 		return nil, fmt.Errorf("cannot read %s: %v", absPath, err)
 	}
 
-	// Get a parser from the pool for this parsing operation
+	// Get a parser from the pool if not provided
 	// Each parser instance is safe to use from a single goroutine
-	p := r.parserPool.Get().(*parser.TreeSitterParser)
-	defer r.parserPool.Put(p)
+	var shouldReturnParser bool
+	if p == nil {
+		p = r.parserPool.Get().(*parser.TreeSitterParser)
+		shouldReturnParser = true
+	}
+	if shouldReturnParser {
+		defer r.parserPool.Put(p)
+	}
 
 	ast, err := p.ParseFile(absPath, content)
 	if err != nil {

@@ -328,9 +328,21 @@ func Run(path string, opts *Options) int {
 
 // analyzeFile analyzes a single file and returns issues with timing metrics
 func analyzeFile(filePath string, registry *rules.Registry, resolver *analyzer.ModuleResolver, opts *Options) ([]rules.Issue, time.Duration, time.Duration, error) {
+	return analyzeFileWithParser(filePath, registry, resolver, nil, opts)
+}
+
+// analyzeFileWithParser analyzes a single file using an optional dedicated parser
+// If parser is nil, the resolver will use its parser pool
+func analyzeFileWithParser(filePath string, registry *rules.Registry, resolver *analyzer.ModuleResolver, p *parser.TreeSitterParser, opts *Options) ([]rules.Issue, time.Duration, time.Duration, error) {
 	// Parse file using resolver (this caches the module for graph building)
 	parseStart := time.Now()
-	module, err := resolver.GetModule(filePath)
+	var module *analyzer.Module
+	var err error
+	if p != nil {
+		module, err = resolver.GetModuleWithParser(filePath, p)
+	} else {
+		module, err = resolver.GetModule(filePath)
+	}
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("failed to parse file: %v", err)
 	}
