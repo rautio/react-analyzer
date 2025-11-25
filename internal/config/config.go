@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // CompilerOptions represents TypeScript compiler options for path resolution
@@ -17,6 +18,7 @@ type CompilerOptions struct {
 type Config struct {
 	CompilerOptions CompilerOptions       `json:"compilerOptions,omitempty"`
 	Rules           map[string]RuleConfig `json:"rules"`
+	Ignore          []string              `json:"ignore,omitempty"` // Glob patterns for files to ignore
 }
 
 // RuleConfig represents configuration for a specific rule
@@ -33,6 +35,7 @@ type DeepPropDrillingOptions struct {
 // DefaultConfig returns the default configuration
 func DefaultConfig() *Config {
 	return &Config{
+		Ignore: []string{},
 		Rules: map[string]RuleConfig{
 			"deep-prop-drilling": {
 				Enabled: true,
@@ -138,6 +141,11 @@ func mergeConfig(base *Config, user *Config) {
 		base.CompilerOptions.Paths = user.CompilerOptions.Paths
 	}
 
+	// Merge ignore patterns (user patterns replace defaults)
+	if user.Ignore != nil {
+		base.Ignore = user.Ignore
+	}
+
 	// Merge rules
 	for ruleName, userRuleConfig := range user.Rules {
 		baseRuleConfig, exists := base.Rules[ruleName]
@@ -189,4 +197,115 @@ func (c *Config) GetDeepPropDrillingOptions() DeepPropDrillingOptions {
 	}
 
 	return options
+}
+
+// ShouldIgnore checks if a file path matches any of the ignore patterns
+func (c *Config) ShouldIgnore(filePath string) bool {
+	// Normalize path to use forward slashes for consistent matching
+	normalizedPath := filepath.ToSlash(filePath)
+
+	for _, pattern := range c.Ignore {
+		if matchGlobPattern(normalizedPath, pattern) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// matchGlobPattern implements simple glob pattern matching
+// Supports: *, **, and negation with !
+func matchGlobPattern(path, pattern string) bool {
+	// Handle negation patterns (e.g., !src/important.tsx)
+	if strings.HasPrefix(pattern, "!") {
+		return !matchGlobPattern(path, pattern[1:])
+	}
+
+	// Normalize both to forward slashes
+	path = filepath.ToSlash(path)
+	pattern = filepath.ToSlash(pattern)
+
+	// Handle ** (match any number of directories)
+	if strings.Contains(pattern, "**") {
+		parts := strings.Split(pattern, "**")
+		if len(parts) == 2 {
+			prefix := parts[0]
+			suffix := parts[1]
+
+			// Remove trailing slash from prefix
+			prefix = strings.TrimSuffix(prefix, "/")
+			// Remove leading slash from suffix
+			suffix = strings.TrimPrefix(suffix, "/")
+
+			// Check prefix matches
+			if prefix != "" {
+				if !strings.HasPrefix(path, prefix+"/") && path != prefix {
+					return false
+				}
+			}
+
+			// Check suffix matches
+			if suffix != "" {
+				// For patterns like **/*.test.tsx, check if path ends with .test.tsx
+				if strings.HasPrefix(suffix, "*") {
+					// Use simple glob matching for the suffix
+					return simpleGlobMatch(path, "*"+suffix)
+				}
+				// For patterns like **/__tests__/**, check if path contains the substring
+				return strings.Contains(path, "/"+suffix+"/") ||
+					strings.HasSuffix(path, "/"+suffix) ||
+					strings.HasPrefix(path, suffix+"/")
+			}
+
+			return true
+		}
+	}
+
+	// Handle * (match within a single directory level)
+	if strings.Contains(pattern, "*") {
+		return simpleGlobMatch(path, pattern)
+	}
+
+	// Exact match or substring match
+	return path == pattern || strings.Contains(path, pattern) || strings.HasSuffix(path, "/"+pattern)
+}
+
+// simpleGlobMatch implements basic glob matching with * and ?
+func simpleGlobMatch(path, pattern string) bool {
+	// Convert glob pattern to simple matching logic
+	// This is a simplified implementation - for production use filepath.Match or a glob library
+
+	patternParts := strings.Split(pattern, "*")
+	if len(patternParts) == 1 {
+		// No wildcards, exact match
+		return path == pattern
+	}
+
+	// Check if path contains all parts in order
+	searchPath := path
+	for i, part := range patternParts {
+		if part == "" {
+			continue
+		}
+
+		index := strings.Index(searchPath, part)
+		if index == -1 {
+			return false
+		}
+
+		// For first part, must be at the beginning (unless pattern starts with *)
+		if i == 0 && !strings.HasPrefix(pattern, "*") && index != 0 {
+			return false
+		}
+
+		// For last part, must be at the end (unless pattern ends with *)
+		if i == len(patternParts)-1 && !strings.HasSuffix(pattern, "*") {
+			return strings.HasSuffix(searchPath, part)
+		}
+
+		// Move search position forward
+		searchPath = searchPath[index+len(part):]
+	}
+
+	return true
 }

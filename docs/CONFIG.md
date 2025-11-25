@@ -15,11 +15,7 @@ Create a `.rarc` (shorthand) or `.reactanalyzerrc.json` file in your project roo
       "@components/*": ["src/components/*"]
     }
   },
-  "ignore": [
-    "**/*.test.tsx",
-    "**/__tests__/**",
-    "**/*.stories.tsx"
-  ],
+  "ignore": ["**/*.test.tsx", "**/__tests__/**", "**/*.stories.tsx"],
   "rules": {
     "deep-prop-drilling": {
       "enabled": true,
@@ -32,6 +28,7 @@ Create a `.rarc` (shorthand) or `.reactanalyzerrc.json` file in your project roo
 ```
 
 The configuration file supports three main sections:
+
 - **`compilerOptions`** - TypeScript path aliases for module resolution (optional)
 - **`ignore`** - File/directory patterns to exclude from analysis (optional, **coming in Phase 4**)
 - **`rules`** - Rule-specific configuration (optional)
@@ -39,7 +36,9 @@ The configuration file supports three main sections:
 ## File Discovery
 
 ### Rule Configuration
+
 The analyzer searches for rule configuration files in the following order:
+
 1. `.rarc` in the current directory (shorthand)
 2. `.reactanalyzerrc.json` in the current directory
 3. `react-analyzer.json` in the current directory
@@ -47,7 +46,9 @@ The analyzer searches for rule configuration files in the following order:
 5. Uses default configuration if no file is found
 
 ### Path Aliases (Module Resolution)
+
 The analyzer searches for path aliases in the following order (highest to lowest priority):
+
 1. `.rarc` - `compilerOptions.paths` section (shorthand)
 2. `.reactanalyzerrc.json` - `compilerOptions.paths` section
 3. `.reactanalyzer.json` - `compilerOptions.paths` section (legacy)
@@ -74,16 +75,18 @@ The `compilerOptions` section allows you to configure TypeScript-style path alia
 ```
 
 **Options:**
+
 - `baseUrl` - Base directory for resolving non-relative module names (default: ".")
 - `paths` - Path mapping entries (supports glob patterns with `*`)
 
 **Example mappings:**
+
 - `@/*` → `src/*` - Maps `@/components/Button` to `src/components/Button`
 - `@components/*` → `src/components/*` - Maps `@components/Button` to `src/components/Button`
 
 **Note:** If you already have a `tsconfig.json`, the analyzer will automatically read path aliases from it. You only need to add `compilerOptions` to `.reactanalyzerrc.json` if you want to override or add additional aliases.
 
-## Ignore Patterns (Coming in Phase 4)
+## Ignore Patterns
 
 The `ignore` section allows you to exclude specific files and directories from analysis. This is useful for skipping test files, story files, or legacy code.
 
@@ -103,32 +106,78 @@ The `ignore` section allows you to exclude specific files and directories from a
 ```
 
 **Pattern Syntax:**
+
 - Supports glob patterns (`**/*.test.tsx` matches all test files recursively)
 - Supports directory exclusions (`**/stories/**` excludes all story directories)
-- Supports negation (`!src/legacy/important.tsx` includes a specific file)
+- Supports negation (`!src/legacy/important.tsx` includes a specific file even if matched by another pattern)
 - Similar to ESLint's `ignorePatterns` and Jest's `testPathIgnorePatterns`
 
-**Default Ignores:**
-The analyzer always ignores these directories (hardcoded):
+**Default Behavior:**
+By default, the analyzer does not ignore any files (except the hardcoded directories listed below). If you want to exclude test files, story files, or other patterns, you must explicitly configure them.
+
+**Hardcoded Ignores:**
+These directories are always ignored and cannot be configured:
+
 - `node_modules/`
 - `dist/`
 - `build/`
 - `.git/`
 
-**CLI Override:**
-```bash
-# Use custom ignore file
-react-analyzer src/ --ignore-path .analyzerignore
+**Common Patterns:**
 
-# Add patterns via CLI
-react-analyzer src/ --ignore "**/*.test.tsx"
+To exclude test and story files, add patterns like these to your config:
+
+```json
+{
+  "ignore": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.test.js",
+    "**/*.test.jsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/*.spec.js",
+    "**/*.spec.jsx",
+    "**/__tests__/**",
+    "**/__mocks__/**",
+    "**/*.stories.tsx",
+    "**/*.stories.ts",
+    "**/*.stories.jsx",
+    "**/*.stories.js"
+  ]
+}
 ```
 
-**Note:** This feature is planned for Phase 4 (see [ROADMAP.md](ROADMAP.md#4d-ignore-pattern-support-1-week)).
+**Examples:**
+
+```json
+// Analyze everything (default behavior - no ignore patterns)
+{
+  "ignore": []
+}
+
+// Ignore test and story files
+{
+  "ignore": [
+    "**/*.test.tsx",
+    "**/__tests__/**",
+    "**/*.stories.tsx"
+  ]
+}
+
+// Ignore specific directories
+{
+  "ignore": [
+    "src/legacy/**",
+    "**/__snapshots__/**"
+  ]
+}
+```
 
 ## Rule Configuration
 
 Each rule can be configured with:
+
 - `enabled`: Boolean to enable/disable the rule
 - `options`: Object with rule-specific options
 
@@ -139,6 +188,7 @@ Each rule can be configured with:
 Detects props passed through multiple component levels without being used.
 
 **Options:**
+
 - `maxDepth` (number, default: 3)
   - Maximum depth of component chain allowed before warning
   - Depth is the total number of components in the chain (origin → consumer)
@@ -147,6 +197,7 @@ Detects props passed through multiple component levels without being used.
   - Set to `4+` for lenient checking (multiple intermediate layers)
 
 **Behavior:**
+
 - `maxDepth: 2` - Only allows: App → Sidebar (direct)
   - Warns about: App → Dashboard → Sidebar
 - `maxDepth: 3` - Allows: App → Dashboard → Sidebar (default)
@@ -280,6 +331,7 @@ If no config file is found, the following defaults are used:
 
 ```json
 {
+  "ignore": [],
   "rules": {
     "deep-prop-drilling": {
       "enabled": true,

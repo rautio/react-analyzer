@@ -89,29 +89,6 @@ func Run(path string, opts *Options) int {
 		return 2
 	}
 
-	// Determine if it's a file or directory
-	var filesToAnalyze []string
-	if info.IsDir() {
-		// Find all relevant files in directory
-		files, err := findFiles(path)
-		if err != nil {
-			printError(fmt.Errorf("failed to scan directory: %v", err), opts.NoColor)
-			return 2
-		}
-		if len(files) == 0 {
-			printError(fmt.Errorf("no .tsx, .jsx, .ts, or .js files found in %s", path), opts.NoColor)
-			return 2
-		}
-		filesToAnalyze = files
-	} else {
-		// Single file - validate extension
-		if err := validateFileExtension(path); err != nil {
-			printError(err, opts.NoColor)
-			return 2
-		}
-		filesToAnalyze = []string{path}
-	}
-
 	// Determine base directory for config and module resolution
 	baseDir := path
 	if !info.IsDir() {
@@ -119,6 +96,7 @@ func Run(path string, opts *Options) int {
 	}
 
 	// Load configuration from .reactanalyzerrc.json (if exists)
+	// Load config BEFORE file scanning so we can apply ignore patterns
 	cfg, configPath, err := config.LoadWithPath(baseDir)
 	if err != nil {
 		// Config loading error is non-fatal, use defaults
@@ -132,6 +110,35 @@ func Run(path string, opts *Options) int {
 		} else {
 			fmt.Println("Configuration: using defaults (no config file found)")
 		}
+	}
+
+	// Determine if it's a file or directory
+	var filesToAnalyze []string
+	if info.IsDir() {
+		// Find all relevant files in directory
+		files, err := findFiles(path, cfg)
+		if err != nil {
+			printError(fmt.Errorf("failed to scan directory: %v", err), opts.NoColor)
+			return 2
+		}
+		if len(files) == 0 {
+			printError(fmt.Errorf("no .tsx, .jsx, .ts, or .js files found in %s", path), opts.NoColor)
+			return 2
+		}
+		filesToAnalyze = files
+	} else {
+		// Single file - validate extension and check if ignored
+		if err := validateFileExtension(path); err != nil {
+			printError(err, opts.NoColor)
+			return 2
+		}
+		if cfg.ShouldIgnore(path) {
+			if opts.Verbose && !opts.JSON {
+				fmt.Printf("File ignored by configuration: %s\n", path)
+			}
+			return 0
+		}
+		filesToAnalyze = []string{path}
 	}
 
 	// Create rule registry with configuration
@@ -346,7 +353,8 @@ func analyzeFile(filePath string, registry *rules.Registry, resolver *analyzer.M
 }
 
 // findFiles recursively finds all relevant files in a directory
-func findFiles(root string) ([]string, error) {
+// Applies ignore patterns from config
+func findFiles(root string, cfg *config.Config) ([]string, error) {
 	var files []string
 
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -365,13 +373,24 @@ func findFiles(root string) ([]string, error) {
 
 		// Check if file has valid extension
 		ext := strings.ToLower(filepath.Ext(path))
+		isValidExt := false
 		for _, validExt := range validExtensions {
 			if ext == validExt {
-				files = append(files, path)
+				isValidExt = true
 				break
 			}
 		}
 
+		if !isValidExt {
+			return nil
+		}
+
+		// Check if file should be ignored based on config patterns
+		if cfg.ShouldIgnore(path) {
+			return nil
+		}
+
+		files = append(files, path)
 		return nil
 	})
 

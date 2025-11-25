@@ -1,0 +1,41 @@
+{
+  "ignore": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.test.js",
+    "**/*.test.jsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/*.spec.js",
+    "**/*.spec.jsx",
+    "**/__tests__/**",
+    "**/__mocks__/**",
+    "**/*.stories.tsx",
+    "**/*.stories.ts",
+    "**/*.stories.jsx",
+    "**/*.stories.js"
+  ],
+  "rules": {
+    "deep-prop-drilling": {
+      "enabled": true,
+      "options": {
+        "maxDepth": 3
+      }
+    },
+    "no-object-deps": {
+      "enabled": true
+    },
+    "unstable-props-to-memo": {
+      "enabled": true
+    },
+    "no-derived-state": {
+      "enabled": true
+    },
+    "no-stale-state": {
+      "enabled": true
+    },
+    "no-inline-props": {
+      "enabled": true
+    }
+  }
+}
