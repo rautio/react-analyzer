@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -467,8 +468,25 @@ func printIssuesGrouped(issues []rules.Issue, stats *AnalysisStats, opts *Option
 		issuesByFile[issue.FilePath] = append(issuesByFile[issue.FilePath], issue)
 	}
 
-	// Print each file's issues
-	for filePath, fileIssues := range issuesByFile {
+	// Sort file paths for deterministic output
+	filePaths := make([]string, 0, len(issuesByFile))
+	for filePath := range issuesByFile {
+		filePaths = append(filePaths, filePath)
+	}
+	sort.Strings(filePaths)
+
+	// Print each file's issues in sorted order
+	for _, filePath := range filePaths {
+		fileIssues := issuesByFile[filePath]
+
+		// Sort issues within each file by line, then column
+		sort.Slice(fileIssues, func(i, j int) bool {
+			if fileIssues[i].Line != fileIssues[j].Line {
+				return fileIssues[i].Line < fileIssues[j].Line
+			}
+			return fileIssues[i].Column < fileIssues[j].Column
+		})
+
 		if opts.NoColor {
 			fmt.Printf("\n%s\n", filePath)
 		} else {
