@@ -111,20 +111,19 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: dist-parts/
+          path: dist/
+          merge-multiple: true
 
-      - name: Merge artifacts
+      - name: List downloaded artifacts
         run: |
-          mkdir -p dist
-          # Copy all build artifacts to dist/ directory
-          find dist-parts/ -type f -name "react-analyzer*" -exec cp {} dist/ \;
-          ls -la dist/
+          echo "Downloaded artifacts:"
+          ls -laR dist/
 
       - name: Create release with GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: '~> v2'
-          args: release --clean
+          args: release --skip=validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
