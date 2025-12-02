@@ -9,7 +9,9 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  # Run tests once before building
+  test:
+    name: Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -25,7 +27,93 @@ jobs:
       - name: Run tests
         run: go test -v ./...
 
-      - name: Run GoReleaser
+  # Build binaries on native platforms
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS builds (native runners)
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+
+          # Linux builds (native runner)
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+
+          # Windows build (native runner)
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Build with GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: build --single-target --snapshot --clean
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+          retention-days: 1
+
+  # Merge artifacts and create release
+  release:
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-parts/
+
+      - name: Merge artifacts
+        run: |
+          mkdir -p dist
+          # Copy all build artifacts to dist/ directory
+          find dist-parts/ -type f -name "react-analyzer*" -exec cp {} dist/ \;
+          ls -la dist/
+
+      - name: Create release with GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser

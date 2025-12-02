@@ -50,18 +50,23 @@ git push origin vX.Y.Z
 
 Once the tag is pushed:
 
-1. GitHub Actions workflow (`.github/workflows/release.yml`) is triggered
-2. Tests are run to ensure quality
-3. GoReleaser builds binaries for:
-   - **macOS**: Intel (amd64) and Apple Silicon (arm64)
-   - **Linux**: amd64 and arm64
-   - **Windows**: amd64
-4. Archives are created (`.tar.gz` for Unix, `.zip` for Windows)
-5. Checksums are generated
-6. GitHub Release is created with:
-   - Release notes (auto-generated from commits)
-   - All binaries attached
-   - Installation instructions
+1. **Test Job**: Tests run once on Ubuntu to verify code quality
+2. **Build Jobs**: Binaries are built on native platforms in parallel (matrix strategy):
+   - **macOS builds** run on `macos-latest` (for darwin/amd64 and darwin/arm64)
+   - **Linux builds** run on `ubuntu-latest` (for linux/amd64 and linux/arm64)
+   - **Windows build** runs on `windows-latest` (for windows/amd64)
+   - Each job uses `goreleaser build --single-target` for native compilation with CGO
+3. **Release Job**: After all builds complete:
+   - Downloads all build artifacts
+   - Merges them into a single release package
+   - Creates archives (`.tar.gz` for Unix, `.zip` for Windows)
+   - Generates checksums
+   - Creates GitHub Release with:
+     - Release notes (auto-generated from commits)
+     - All binaries attached
+     - Installation instructions
+
+**Why native builds?** Since react-analyzer uses `go-tree-sitter` which requires CGO, cross-compilation is complex. Building on native platforms ensures reliable compilation with proper C toolchains.
 
 ### 5. Verify the Release
 
@@ -92,10 +97,9 @@ goreleaser build --snapshot --clean --single-target
 
 # Test the binary
 ./dist/react-analyzer_*/react-analyzer --version
-
-# Full release build (all platforms, snapshot mode)
-goreleaser build --snapshot --clean
 ```
+
+**Note:** Local testing only builds for your current platform due to CGO requirements. The full multi-platform build happens automatically in GitHub Actions using native runners for each platform.
 
 ## Commit Message Format
 
@@ -116,10 +120,21 @@ To get nice auto-generated changelogs, follow conventional commit format:
 
 ### Build fails with CGO errors
 
-**Solution:** The GitHub Actions runner has the necessary build tools. If testing locally, ensure you have a C compiler installed:
+**Solution:** The GitHub Actions workflow builds on native runners which have the necessary build tools for each platform. If testing locally, ensure you have a C compiler installed:
 - **macOS**: `xcode-select --install`
 - **Linux**: `apt-get install build-essential`
 - **Windows**: Install MinGW or TDM-GCC
+
+### GitHub Actions build matrix fails
+
+**Solution:** Check the Actions logs to see which platform failed:
+1. Go to https://github.com/rautio/react-analyzer/actions
+2. Click on the failed workflow run
+3. Check the specific platform job that failed
+4. Common issues:
+   - Missing dependencies on the runner
+   - Platform-specific build flags needed
+   - CGO compilation issues (ensure `CGO_ENABLED=1` is set correctly)
 
 ### Release is created but binaries are missing
 

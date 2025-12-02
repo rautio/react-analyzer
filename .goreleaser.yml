@@ -7,8 +7,9 @@ before:
   hooks:
     # Ensure dependencies are up to date
     - go mod tidy
-    # Run tests before building
-    - go test ./...
+    # Tests are run in GitHub Actions before build jobs
+    # Commenting out to avoid running tests multiple times per platform
+    # - go test ./...
 
 builds:
   - id: react-analyzer
