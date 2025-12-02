@@ -1,0 +1,118 @@
+# GoReleaser configuration for react-analyzer
+# https://goreleaser.com
+
+version: 2
+
+before:
+  hooks:
+    # Ensure dependencies are up to date
+    - go mod tidy
+    # Run tests before building
+    - go test ./...
+
+builds:
+  - id: react-analyzer
+    main: ./cmd/react-analyzer
+    binary: react-analyzer
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Ignore combinations that don't make sense
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+    flags:
+      - -trimpath
+
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - docs/**/*
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: "New Features"
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: "Bug Fixes"
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: "Performance Improvements"
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 2
+    - title: "Other Changes"
+      order: 999
+
+release:
+  github:
+    owner: rautio
+    name: react-analyzer
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
+  header: |
+    ## React Analyzer v{{.Version}}
+
+    Download the appropriate binary for your platform below.
+
+    ### Installation
+
+    **macOS/Linux:**
+    ```bash
+    # Extract the archive
+    tar -xzf react-analyzer_{{.Version}}_<OS>_<ARCH>.tar.gz
+
+    # Move to your PATH
+    sudo mv react-analyzer /usr/local/bin/
+
+    # Verify installation
+    react-analyzer --version
+    ```
+
+    **Windows:**
+    ```powershell
+    # Extract the zip file
+    # Add the directory to your PATH or move react-analyzer.exe to a directory in your PATH
+
+    # Verify installation
+    react-analyzer.exe --version
+    ```
+  footer: |
+    ---
+
+    **Full Changelog**: https://github.com/rautio/react-analyzer/compare/{{.PreviousTag}}...{{.Tag}}
+
+# Announce releases (optional - can enable later)
+# announce:
+#   twitter:
+#     enabled: false
+#   discord:
+#     enabled: false
