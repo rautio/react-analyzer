@@ -143,24 +143,21 @@ jobs:
             echo "Processing $platform_name from $binary_dir"
 
             # Determine archive name and format
+            archive_name="react-analyzer_${VERSION}_${platform_name}"
+
             if [[ "$platform_name" == *"windows"* ]]; then
-              archive_name="react-analyzer_${VERSION}_${platform_name}.zip"
-              echo "Creating Windows zip: $archive_name"
+              echo "Creating Windows zip: ${archive_name}.zip"
 
               # Create zip with proper structure (binary at root of archive)
-              cd "$binary_dir"
-              zip -r "../../dist/${archive_name}" * README.md LICENSE docs/ 2>/dev/null || zip -r "../../dist/${archive_name}" *.exe
-              cd - > /dev/null
+              (cd "$binary_dir" && zip -r - .) > "dist/${archive_name}.zip"
             else
-              archive_name="react-analyzer_${VERSION}_${platform_name}.tar.gz"
-              echo "Creating Unix tar.gz: $archive_name"
+              echo "Creating Unix tar.gz: ${archive_name}.tar.gz"
 
-              # Create tar.gz with proper structure
-              tar -czf "dist/${archive_name}" \
+              # Create tar.gz with proper structure (binary in react-analyzer/ subdirectory)
+              tar -czf "dist/${archive_name}.tar.gz" \
                 -C "$binary_dir" \
                 --transform 's,^,react-analyzer/,' \
-                . \
-                2>/dev/null || tar -czf "dist/${archive_name}" -C "$binary_dir" .
+                . 2>/dev/null || tar -czf "dist/${archive_name}.tar.gz" -C "$binary_dir" .
             fi
 
             echo "✓ Created: $archive_name"
