@@ -2,6 +2,18 @@
 
 This document describes how to create a new release of react-analyzer.
 
+## Release Architecture
+
+**Why This Approach?**
+
+react-analyzer uses `go-tree-sitter`, which requires CGO (C bindings). This makes cross-compilation complex because it needs platform-specific C compilers. Our release strategy uses **native platform builds**, which is the standard pattern for CGO projects:
+
+- **Build**: Use `goreleaser build --single-target` on native runners (macOS/Linux/Windows)
+- **Package**: Manually create archives and checksums
+- **Release**: Use GitHub Actions to publish
+
+This is the recommended approach for open-source CGO projects using free GoReleaser. To use GoReleaser for packaging, you'd need GoReleaser Pro's `builder: prebuilt` feature (~$300-600/year).
+
 ## Prerequisites
 
 - Push access to the repository
@@ -11,7 +23,7 @@ This document describes how to create a new release of react-analyzer.
 
 ## Creating a Release
 
-The release process is fully automated using GoReleaser and GitHub Actions.
+The release process is automated using GitHub Actions with native platform builds.
 
 ### 1. Decide on Version Number
 
@@ -58,15 +70,14 @@ Once the tag is pushed:
    - Each job uses `goreleaser build --single-target` for native compilation with CGO
 3. **Release Job**: After all builds complete:
    - Downloads all build artifacts
-   - Merges them into a single release package
    - Creates archives (`.tar.gz` for Unix, `.zip` for Windows)
-   - Generates checksums
+   - Generates SHA256 checksums
    - Creates GitHub Release with:
      - Release notes (auto-generated from commits)
-     - All binaries attached
+     - All platform binaries attached
      - Installation instructions
 
-**Why native builds?** Since react-analyzer uses `go-tree-sitter` which requires CGO, cross-compilation is complex. Building on native platforms ensures reliable compilation with proper C toolchains.
+**Note on GoReleaser:** While GoReleaser is used for building (`goreleaser build`), the final packaging is done manually in GitHub Actions. This is the standard pattern for CGO projects without GoReleaser Pro. The `.goreleaser.yml` file is primarily for local development testing.
 
 ### 5. Verify the Release
 

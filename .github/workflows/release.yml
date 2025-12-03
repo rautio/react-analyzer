@@ -111,19 +111,114 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: dist/
-          merge-multiple: true
+          path: dist-downloads/
+          merge-multiple: false
 
-      - name: List downloaded artifacts
+      - name: Create release archives
         run: |
-          echo "Downloaded artifacts:"
-          ls -laR dist/
+          set -e
+          mkdir -p dist
+          VERSION="${GITHUB_REF_NAME#v}"
 
-      - name: Create release with GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+          echo "Creating release archives for version ${VERSION}"
+
+          # Process each platform's artifacts
+          for artifact_dir in dist-downloads/dist-*; do
+            if [ ! -d "$artifact_dir" ]; then
+              continue
+            fi
+
+            # Extract platform info from artifact directory name
+            # Format: dist-downloads/dist-{goos}-{goarch}/react-analyzer_{goos}_{goarch}_{version}/
+            platform_name=$(basename "$artifact_dir" | sed 's/^dist-//')
+
+            # Find the binary directory inside the artifact
+            binary_dir=$(find "$artifact_dir" -type d -name "react-analyzer_*" | head -1)
+
+            if [ -z "$binary_dir" ]; then
+              echo "Warning: No binary directory found in $artifact_dir"
+              continue
+            fi
+
+            echo "Processing $platform_name from $binary_dir"
+
+            # Determine archive name and format
+            if [[ "$platform_name" == *"windows"* ]]; then
+              archive_name="react-analyzer_${VERSION}_${platform_name}.zip"
+              echo "Creating Windows zip: $archive_name"
+
+              # Create zip with proper structure (binary at root of archive)
+              cd "$binary_dir"
+              zip -r "../../dist/${archive_name}" * README.md LICENSE docs/ 2>/dev/null || zip -r "../../dist/${archive_name}" *.exe
+              cd - > /dev/null
+            else
+              archive_name="react-analyzer_${VERSION}_${platform_name}.tar.gz"
+              echo "Creating Unix tar.gz: $archive_name"
+
+              # Create tar.gz with proper structure
+              tar -czf "dist/${archive_name}" \
+                -C "$binary_dir" \
+                --transform 's,^,react-analyzer/,' \
+                . \
+                2>/dev/null || tar -czf "dist/${archive_name}" -C "$binary_dir" .
+            fi
+
+            echo "✓ Created: $archive_name"
+          done
+
+          # Generate checksums
+          cd dist
+          if ls *.tar.gz *.zip 1> /dev/null 2>&1; then
+            sha256sum *.tar.gz *.zip 2>/dev/null > checksums.txt || shasum -a 256 *.tar.gz *.zip > checksums.txt
+            echo "✓ Generated checksums"
+            echo ""
+            echo "Release artifacts:"
+            ls -lh *.tar.gz *.zip checksums.txt 2>/dev/null
+          else
+            echo "Error: No archives created"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
         with:
-          distribution: goreleaser
-          version: '~> v2'
-          args: release --skip=validate --skip=build
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          body: |
+            ## React Analyzer ${{ github.ref_name }}
+
+            Download the appropriate binary for your platform below.
+
+            ### Installation
+
+            **macOS/Linux:**
+            ```bash
+            # Download and extract the archive for your platform
+            tar -xzf react-analyzer_${{ github.ref_name }}_<OS>_<ARCH>.tar.gz
+            cd react-analyzer
+
+            # Move binary to your PATH
+            sudo mv react-analyzer /usr/local/bin/
+
+            # Verify installation
+            react-analyzer --version
+            ```
+
+            **Windows:**
+            ```powershell
+            # Extract the zip file
+            # Add the directory to your PATH or move react-analyzer.exe to a directory in your PATH
+
+            # Verify installation
+            react-analyzer.exe --version
+            ```
+
+            ### Checksums
+
+            Verify your download with SHA256 checksums in `checksums.txt`.
+          draft: false
+          prerelease: auto
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
