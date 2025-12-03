@@ -124,6 +124,6 @@ jobs:
         with:
           distribution: goreleaser
           version: '~> v2'
-          args: release --skip=validate
+          args: release --skip=validate --skip=build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
