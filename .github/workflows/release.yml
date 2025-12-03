@@ -186,35 +186,24 @@ jobs:
           body: |
             ## React Analyzer ${{ github.ref_name }}
 
-            Download the appropriate binary for your platform below.
-
             ### Installation
 
-            **macOS/Linux:**
+            **macOS/Linux (Recommended):**
             ```bash
-            # Download and extract the archive for your platform
-            tar -xzf react-analyzer_${{ github.ref_name }}_<OS>_<ARCH>.tar.gz
-            cd react-analyzer
+            curl -fsSL https://raw.githubusercontent.com/rautio/react-analyzer/main/install.sh | sh
+            ```
 
-            # Move binary to your PATH
-            sudo mv react-analyzer /usr/local/bin/
-
-            # Verify installation
-            react-analyzer --version
+            **Install specific version:**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/rautio/react-analyzer/main/install.sh | VERSION=${{ github.ref_name }} sh
             ```
 
             **Windows:**
-            ```powershell
-            # Extract the zip file
-            # Add the directory to your PATH or move react-analyzer.exe to a directory in your PATH
+            Download the `.zip` file below, extract it, and add `react-analyzer.exe` to your PATH.
 
-            # Verify installation
-            react-analyzer.exe --version
-            ```
+            ---
 
-            ### Checksums
-
-            Verify your download with SHA256 checksums in `checksums.txt`.
+            SHA256 checksums available in `checksums.txt`.
           draft: false
           prerelease: auto
         env:

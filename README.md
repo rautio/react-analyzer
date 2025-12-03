@@ -18,15 +18,25 @@ Built with Go and tree-sitter for blazing-fast analysis.
 
 ## Installation
 
-Currently requires building from source:
+**macOS/Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/rautio/react-analyzer/main/install.sh | sh
+```
 
+**Windows:**
+Download the latest `.zip` from [Releases](https://github.com/rautio/react-analyzer/releases), extract it, and add `react-analyzer.exe` to your PATH.
+
+**Custom install directory:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/rautio/react-analyzer/main/install.sh | INSTALL_DIR=~/.local/bin sh
+```
+
+**Build from source** (requires Go 1.23+):
 ```bash
 git clone https://github.com/rautio/react-analyzer
 cd react-analyzer
 go build -o react-analyzer ./cmd/react-analyzer
 ```
-
-Pre-built binaries coming soon.
 
 ## Quick Start
 
@@ -114,14 +124,14 @@ fi
 
 React Analyzer includes several rules to catch common React performance issues and anti-patterns. Each rule has detailed documentation with examples and explanations.
 
-| Rule                     | Description                                                                                              | Documentation                          |
-| ------------------------ | -------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `unstable-props-to-memo` | Detects unstable props breaking memoization (React.memo, useMemo, useCallback). **Cross-file analysis**. | [docs](docs/rules/unstable-props-to-memo.md) |
-| `no-object-deps`         | Prevents unstable object/array dependencies causing infinite re-render loops                             | [docs](docs/rules/no-object-deps.md)   |
-| `deep-prop-drilling`     | Detects props drilled through multiple component levels. **Cross-file analysis**. Configurable threshold. | [docs](CONFIG.md#deep-prop-drilling)   |
-| `no-derived-state`       | Detects useState mirroring props via useEffect (unnecessary re-renders)                                  | [docs](docs/rules/no-derived-state.md) |
-| `no-stale-state`         | Prevents stale closures by requiring functional state updates                                            | [docs](docs/rules/no-stale-state.md)   |
-| `no-inline-props`        | Detects inline objects/arrays/functions in JSX props breaking memoization                                | [docs](docs/rules/no-inline-props.md)  |
+| Rule                     | Description                                                                                               | Documentation                                |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `unstable-props-to-memo` | Detects unstable props breaking memoization (React.memo, useMemo, useCallback). **Cross-file analysis**.  | [docs](docs/rules/unstable-props-to-memo.md) |
+| `no-object-deps`         | Prevents unstable object/array dependencies causing infinite re-render loops                              | [docs](docs/rules/no-object-deps.md)         |
+| `deep-prop-drilling`     | Detects props drilled through multiple component levels. **Cross-file analysis**. Configurable threshold. | [docs](CONFIG.md#deep-prop-drilling)         |
+| `no-derived-state`       | Detects useState mirroring props via useEffect (unnecessary re-renders)                                   | [docs](docs/rules/no-derived-state.md)       |
+| `no-stale-state`         | Prevents stale closures by requiring functional state updates                                             | [docs](docs/rules/no-stale-state.md)         |
+| `no-inline-props`        | Detects inline objects/arrays/functions in JSX props breaking memoization                                 | [docs](docs/rules/no-inline-props.md)        |
 
 ### Planned Rules
 
@@ -177,11 +187,12 @@ Create a `.rarc` (or `.reactanalyzerrc.json`) file to configure both path aliase
 **Priority:** `.rarc` > `.reactanalyzerrc.json` > `.reactanalyzer.json` (legacy) > `tsconfig.json`
 
 **Supported Import Formats:**
+
 ```tsx
-import Button from '@/components/Button';       // ✅ Aliased import
-import { utils } from '@utils/helpers';         // ✅ Aliased with nested path
-import Component from './Component';            // ✅ Relative import (always supported)
-import React from 'react';                      // ✅ External package (skipped)
+import Button from "@/components/Button"; // ✅ Aliased import
+import { utils } from "@utils/helpers"; // ✅ Aliased with nested path
+import Component from "./Component"; // ✅ Relative import (always supported)
+import React from "react"; // ✅ External package (skipped)
 ```
 
 See [Configuration Guide](docs/CONFIG.md) for complete documentation, `.rarc.example` or `.reactanalyzerrc.example.json` for examples.
