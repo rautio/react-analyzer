@@ -32,17 +32,22 @@ Follow [Semantic Versioning](https://semver.org/):
 - **MINOR** version for new functionality in a backward-compatible manner
 - **PATCH** version for backward-compatible bug fixes
 
-### 2. Update Version in Code (Optional)
+### 2. Create and Push a Git Tag
 
-The version in `cmd/react-analyzer/main.go` can be updated to match the release:
+**The git tag is the single source of truth for versioning** - you don't need to manually update version files in the repo.
 
-```go
-const Version = "X.Y.Z"
-```
+How versioning works during releases:
 
-This is optional as the version will also be set via ldflags during build.
+**CLI Binary:**
+- Source file `cmd/react-analyzer/main.go` contains `const Version = "dev"` (for development builds)
+- During release builds, GoReleaser uses ldflags to override this with the git tag version
+- Released binaries will show the correct version from the tag when running `react-analyzer --version`
 
-### 3. Create and Push a Git Tag
+**VS Code Extension:**
+- Source file `vscode-extension/package.json` contains a placeholder version (manually managed)
+- During release, the `package-extension` job temporarily updates this to match the git tag
+- The packaged `.vsix` file contains the correct version from the tag
+- These version changes are **not committed back** - they're only used for packaging
 
 ```bash
 # Ensure you're on main and up to date
@@ -56,41 +61,44 @@ git tag -a vX.Y.Z -m "Release vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
-**Important:** The tag MUST start with `v` (e.g., `v1.0.0`, not `1.0.0`)
+**Important:** The tag MUST start with `v` (e.g., `v0.0.3`, not `0.0.3`)
 
-### 4. Automated Build Process
+### 3. Automated Build Process
 
 Once the tag is pushed:
 
 1. **Test Job**: Tests run once on Ubuntu to verify code quality
-2. **Build Jobs**: Binaries are built on native platforms in parallel (matrix strategy):
+2. **Extension Packaging Job**: Temporarily syncs version from git tag, then compiles and packages VS Code extension into `.vsix` file
+3. **Build Jobs**: CLI binaries are built on native platforms in parallel (matrix strategy):
    - **macOS builds** run on `macos-latest` (for darwin/amd64 and darwin/arm64)
    - **Linux builds** run on `ubuntu-latest` (for linux/amd64 and linux/arm64)
    - **Windows build** runs on `windows-latest` (for windows/amd64)
    - Each job uses `goreleaser build --single-target` for native compilation with CGO
-3. **Release Job**: After all builds complete:
-   - Downloads all build artifacts
+4. **Release Job**: After all builds complete:
+   - Downloads all build artifacts (CLI binaries + extension)
    - Creates archives (`.tar.gz` for Unix, `.zip` for Windows)
    - Generates SHA256 checksums
    - Creates GitHub Release with:
      - Release notes (auto-generated from commits)
      - All platform binaries attached
-     - Installation instructions
+     - VS Code extension `.vsix` file
+     - Installation instructions for both CLI and extension
 
 **Note on GoReleaser:** While GoReleaser is used for building (`goreleaser build`), the final packaging is done manually in GitHub Actions. This is the standard pattern for CGO projects without GoReleaser Pro. The `.goreleaser.yml` file is primarily for local development testing.
 
-### 5. Verify the Release
+### 4. Verify the Release
 
 1. Go to https://github.com/rautio/react-analyzer/releases
-2. Find your new release (e.g., `v1.0.0`)
-3. Check that all expected binaries are attached:
+2. Find your new release (e.g., `v0.0.3`)
+3. Check that all expected artifacts are attached:
    - `react-analyzer_X.Y.Z_darwin_amd64.tar.gz`
    - `react-analyzer_X.Y.Z_darwin_arm64.tar.gz`
    - `react-analyzer_X.Y.Z_linux_amd64.tar.gz`
    - `react-analyzer_X.Y.Z_linux_arm64.tar.gz`
    - `react-analyzer_X.Y.Z_windows_amd64.zip`
+   - `react-analyzer-X.Y.Z.vsix`
    - `checksums.txt`
-4. Download and test a binary for your platform
+4. Download and test both CLI and extension
 
 ## Testing a Release Locally
 

@@ -2,6 +2,35 @@
 
 Static analysis extension for detecting React performance issues and antipatterns.
 
+## Installation
+
+### From GitHub Releases (Recommended)
+
+1. Download the latest `react-analyzer-*.vsix` from [Releases](https://github.com/rautio/react-analyzer/releases)
+2. Install via command line:
+   ```bash
+   code --install-extension react-analyzer-<version>.vsix
+   ```
+
+Or via VS Code UI:
+1. Open Extensions view (Ctrl/Cmd+Shift+X)
+2. Click "..." → "Install from VSIX..."
+3. Select the downloaded file
+
+**Note:** The extension requires the React Analyzer CLI to be installed. The CLI is included in the same release.
+
+### CLI Installation
+
+The extension uses the React Analyzer CLI. Install it first:
+
+**macOS/Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/rautio/react-analyzer/main/install.sh | sh
+```
+
+**Windows:**
+Download the CLI `.zip` from [Releases](https://github.com/rautio/react-analyzer/releases).
+
 ## Features
 
 - **Real-time diagnostics**: See performance issues directly in your editor with squiggly underlines

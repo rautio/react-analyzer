@@ -55,7 +55,15 @@ React Analyzer includes a VS Code extension with enhanced features:
 - **Clickable Related Information** - Jump between related code locations
 - **Analyze on save** - Automatic analysis when files are saved
 
-See [vscode-extension/README.md](vscode-extension/README.md) for installation and usage.
+**Installation:**
+
+Download the latest `.vsix` from [Releases](https://github.com/rautio/react-analyzer/releases) and install:
+
+```bash
+code --install-extension react-analyzer-<version>.vsix
+```
+
+See [vscode-extension/README.md](vscode-extension/README.md) for full documentation.
 
 ## Usage
 

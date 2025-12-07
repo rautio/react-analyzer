@@ -27,6 +27,50 @@ jobs:
       - name: Run tests
         run: go test -v ./...
 
+  # Package VS Code extension
+  package-extension:
+    name: Package VS Code Extension
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync extension version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Setting extension version to $VERSION"
+          cd vscode-extension
+          npm version $VERSION --no-git-tag-version --allow-same-version
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: vscode-extension
+        run: npm ci
+
+      - name: Compile extension
+        working-directory: vscode-extension
+        run: npm run compile
+
+      - name: Package extension
+        working-directory: vscode-extension
+        run: |
+          npm install -g @vscode/vsce
+          vsce package
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-extension
+          path: vscode-extension/*.vsix
+          retention-days: 1
+
   # Build binaries on native platforms
   build:
     name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
@@ -95,7 +139,7 @@ jobs:
   # Merge artifacts and create release
   release:
     name: Release
-    needs: build
+    needs: [build, package-extension]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -121,6 +165,12 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
 
           echo "Creating release archives for version ${VERSION}"
+
+          # Move VS Code extension to dist/
+          if [ -f dist-downloads/vscode-extension/*.vsix ]; then
+            echo "Including VS Code extension"
+            mv dist-downloads/vscode-extension/*.vsix dist/
+          fi
 
           # Process each platform's artifacts
           for artifact_dir in dist-downloads/dist-*; do
@@ -182,11 +232,12 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/*.zip
+            dist/*.vsix
             dist/checksums.txt
           body: |
             ## React Analyzer ${{ github.ref_name }}
 
-            ### Installation
+            ### CLI Installation
 
             **macOS/Linux (Recommended):**
             ```bash
@@ -200,6 +251,22 @@ jobs:
 
             **Windows:**
             Download the `.zip` file below, extract it, and add `react-analyzer.exe` to your PATH.
+
+            ### VS Code Extension Installation
+
+            **Install from VSIX:**
+            1. Download `react-analyzer-${{ github.ref_name }}.vsix` below
+            2. Install via command line:
+               ```bash
+               code --install-extension react-analyzer-${{ github.ref_name }}.vsix
+               ```
+
+            Or via VS Code UI:
+            1. Open Extensions view (Ctrl/Cmd+Shift+X)
+            2. Click "..." → "Install from VSIX..."
+            3. Select the downloaded `.vsix` file
+
+            See the [extension documentation](https://github.com/rautio/react-analyzer/blob/main/vscode-extension/README.md) for features and usage.
 
             ---
 
