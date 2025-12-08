@@ -1,7 +1,7 @@
 {
   "name": "react-analyzer",
   "displayName": "React Analyzer",
-  "description": "Static analysis tool for React performance issues",
+  "description": "Static analysis tool for React performance issues (requires CLI installation)",
   "version": "0.0.3",
   "publisher": "react-analyzer",
   "repository": {

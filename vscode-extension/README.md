@@ -2,9 +2,34 @@
 
 Static analysis extension for detecting React performance issues and antipatterns.
 
+## ⚠️ Prerequisites
+
+**This extension requires the React Analyzer CLI to be installed separately.**
+
+The VS Code extension is a UI wrapper around the CLI tool. You must install the CLI first before using the extension.
+
 ## Installation
 
-### From GitHub Releases (Recommended)
+### Step 1: Install the CLI (Required)
+
+The extension cannot function without the CLI installed on your system.
+
+**macOS/Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/rautio/react-analyzer/main/install.sh | sh
+```
+
+**Windows:**
+Download the CLI `.zip` from [Releases](https://github.com/rautio/react-analyzer/releases), extract it, and add `react-analyzer.exe` to your PATH.
+
+**Verify Installation:**
+```bash
+react-analyzer --version
+```
+
+### Step 2: Install the Extension
+
+Once the CLI is installed, install the VS Code extension:
 
 1. Download the latest `react-analyzer-*.vsix` from [Releases](https://github.com/rautio/react-analyzer/releases)
 2. Install via command line:
@@ -17,19 +42,7 @@ Or via VS Code UI:
 2. Click "..." → "Install from VSIX..."
 3. Select the downloaded file
 
-**Note:** The extension requires the React Analyzer CLI to be installed. The CLI is included in the same release.
-
-### CLI Installation
-
-The extension uses the React Analyzer CLI. Install it first:
-
-**macOS/Linux:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/rautio/react-analyzer/main/install.sh | sh
-```
-
-**Windows:**
-Download the CLI `.zip` from [Releases](https://github.com/rautio/react-analyzer/releases).
+The extension will automatically detect the CLI if it's installed in your PATH. If you installed the CLI to a custom location, you can configure the path in VS Code settings: `reactAnalyzer.cliPath`
 
 ## Features
 

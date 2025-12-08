@@ -26,9 +26,14 @@ export async function activate(context: vscode.ExtensionContext) {
     // Check if CLI is available
     const isAvailable = await cliRunner.checkCliAvailable();
     if (!isAvailable) {
-        vscode.window.showWarningMessage(
-            'React Analyzer CLI not found. Please check your configuration.'
-        );
+        const message = 'React Analyzer requires the CLI to be installed separately.';
+        const installButton = 'Install Instructions';
+
+        vscode.window.showErrorMessage(message, installButton).then(selection => {
+            if (selection === installButton) {
+                vscode.env.openExternal(vscode.Uri.parse('https://github.com/rautio/react-analyzer#installation'));
+            }
+        });
     } else {
         try {
             const version = await cliRunner.getVersion();

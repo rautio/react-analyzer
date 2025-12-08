@@ -7,15 +7,15 @@ export class CliRunner {
     private cliPath: string;
 
     constructor(context: vscode.ExtensionContext) {
-        // Get CLI path from configuration or use bundled binary
+        // Get CLI path from configuration or use system binary
         const configuredPath = vscode.workspace.getConfiguration('reactAnalyzer').get<string>('cliPath');
 
         if (configuredPath && configuredPath.length > 0) {
             this.cliPath = configuredPath;
         } else {
-            // Use bundled binary (will be in extension root after packaging)
-            // For now, use the binary from the parent directory during development
-            this.cliPath = path.join(context.extensionPath, '..', 'react-analyzer');
+            // Use react-analyzer from system PATH
+            // Users should install the CLI separately (see extension README)
+            this.cliPath = 'react-analyzer';
         }
     }
 

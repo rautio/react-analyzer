@@ -57,7 +57,9 @@ React Analyzer includes a VS Code extension with enhanced features:
 
 **Installation:**
 
-Download the latest `.vsix` from [Releases](https://github.com/rautio/react-analyzer/releases) and install:
+⚠️ **The extension requires the CLI to be installed first** (see installation instructions above).
+
+Once the CLI is installed, download the latest `.vsix` from [Releases](https://github.com/rautio/react-analyzer/releases) and install:
 
 ```bash
 code --install-extension react-analyzer-<version>.vsix
