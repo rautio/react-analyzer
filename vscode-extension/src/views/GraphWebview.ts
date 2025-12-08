@@ -48,14 +48,15 @@ export class GraphWebview {
         this._panel = panel;
         this._extensionUri = extensionUri;
 
-        // Get CLI path from configuration or use bundled binary
+        // Get CLI path from configuration or use system binary
         const configuredPath = vscode.workspace.getConfiguration('reactAnalyzer').get<string>('cliPath');
         if (configuredPath && configuredPath.length > 0) {
             this._cliPath = configuredPath;
             console.log('Using configured CLI path:', this._cliPath);
         } else {
-            // Use bundled binary from parent directory during development
-            this._cliPath = path.join(path.dirname(extensionUri.fsPath), 'react-analyzer');
+            // Use react-analyzer from system PATH
+            // Users should install the CLI separately (see extension README)
+            this._cliPath = 'react-analyzer';
             console.log('Using default CLI path:', this._cliPath);
         }
 
